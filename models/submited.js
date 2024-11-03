@@ -25,9 +25,14 @@ module.exports = (sequelize) => {
     },
     {
       tableName: "Submited",
-      timestamps: false,
+      timestamps: true,
     }
   );
+
+  Submited.associate = function (models) {
+    Submited.belongsTo(models.Users, { foreignKey: "users_id" });
+    Submited.belongsTo(models.Question, { foreignKey: "question_id" });
+  };
 
   return Submited;
 };

@@ -25,7 +25,7 @@ module.exports = (sequelize) => {
     },
     {
       tableName: "Users_Team",
-      timestamps: false,
+      timestamps: true,
     }
   );
 

@@ -8,13 +8,23 @@ module.exports = (sequelize) => {
     {
       user_id: {
         type: DataTypes.UUID,
-        primaryKey: true,
+        defaultValue: DataTypes.UUIDV4,
         allowNull: false,
+        primaryKey: true,
       },
       student_id: {
         type: DataTypes.INTEGER,
+        allowNull: true,
       },
-      name: {
+      itaccount: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+      },
+      first_name: {
+        type: DataTypes.STRING(50),
+        allowNull: false,
+      },
+      last_name: {
         type: DataTypes.STRING(50),
         allowNull: false,
       },

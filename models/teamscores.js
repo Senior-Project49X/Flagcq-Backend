@@ -34,7 +34,7 @@ module.exports = (sequelize) => {
     },
     {
       tableName: "TeamScores",
-      timestamps: false,
+      timestamps: true,
     }
   );
 

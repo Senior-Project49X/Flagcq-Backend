@@ -19,14 +19,10 @@ module.exports = (sequelize) => {
         defaultValue: 0,
         allowNull: false,
       },
-      current_submit: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
     },
     {
       tableName: "Points",
-      timestamps: false,
+      timestamps: true,
     }
   );
 

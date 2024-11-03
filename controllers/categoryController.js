@@ -41,6 +41,35 @@ const categoryController = {
       return h.response({ error: "Unable to delete category" }).code(500);
     }
   },
+  getCategoriesById: async (request, h) => {
+    try {
+      const category = await Category.findByPk(request.params.id);
+      if (category) {
+        return h.response(category).code(200);
+      }
+      return h.response({ error: "Category not found" }).code(404);
+    } catch (error) {
+      console.error(error);
+      return h.response({ error: "Unable to retrieve category" }).code(500);
+    }
+  },
+  getCategoriesByNames: async (request, h) => {
+    try {
+      const category = await Category.findOne({
+        where: {
+          name: request.params.name,
+        },
+        attributes: ["id"],
+      });
+      if (category) {
+        return h.response({ id: category.id }).code(200);
+      }
+      return h.response({ error: "Category not found" }).code(404);
+    } catch (error) {
+      console.error(error);
+      return h.response({ error: "Unable to retrieve category" }).code(500);
+    }
+  },
 };
 
 module.exports = categoryController;

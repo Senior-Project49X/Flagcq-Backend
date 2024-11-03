@@ -15,6 +15,10 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(50),
         allowNull: false,
       },
+      Decsription: {
+        type: DataTypes.STRING(500),
+        allowNull: false,
+      },
       enroll_startDate: {
         type: DataTypes.DATE,
         allowNull: false,
@@ -34,7 +38,7 @@ module.exports = (sequelize) => {
     },
     {
       tableName: "Tournament",
-      timestamps: false,
+      timestamps: true,
     }
   );
 

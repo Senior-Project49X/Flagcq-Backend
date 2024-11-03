@@ -6,12 +6,52 @@ const sequelize = db.sequelize;
 const Hello = require("./routes/hello");
 const categoryRoute = require("./routes/catagoryRoutes");
 const userRoute = require("./routes/userRoute");
-
+const questionRoute = require("./routes/questionRoutes");
 
 const init = async () => {
   const server = Hapi.server({
-    port: 3000,
+    port: 3001,
     host: "0.0.0.0",
+    routes: {
+      cors: {
+        origin: ["http://localhost:3000", "http://10.10.184.74:3001"],
+        headers: [
+          "Accept",
+          "Authorization",
+          "Content-Type",
+          "If-None-Match",
+          "X-Requested-With",
+        ],
+        additionalHeaders: ["X-Requested-With"],
+        credentials: true,
+        maxAge: 600,
+        exposedHeaders: ["X-Custom-Header"],
+      },
+      files: {
+        relativeTo: Path.join(__dirname, "uploads"),
+      },
+    },
+  });
+
+  server.route({
+    method: "OPTIONS",
+    path: "/{any*}",
+    handler: (request, h) => {
+      const response = h.response();
+      response.header(
+        "Access-Control-Allow-Headers",
+        "Accept, Authorization, Content-Type, If-None-Match, X-Requested-With"
+      );
+      response.header(
+        "Access-Control-Allow-Methods",
+        "GET, POST, PUT, DELETE, OPTIONS"
+      );
+      return response.code(204);
+    },
+    options: {
+      auth: false,
+      cors: true,
+    },
   });
 
   try {
@@ -27,24 +67,19 @@ const init = async () => {
   Hello(server);
   server.route(categoryRoute);
   server.route(userRoute);
-
-  server.ext("onPreResponse", (request, h) => {
-    const response = request.response;
-    if (!response.isBoom && response.header) {
-      response.header(
-        "Content-Security-Policy",
-        "default-src 'self'; script-src 'self'; object-src 'none'; frame-ancestors 'none';"
-      );
-    }
-    return h.continue;
-  });
+  server.route(questionRoute);
 
   await server.start();
   console.log("Server running on %s", server.info.uri);
 };
 
 process.on("unhandledRejection", (err) => {
-  console.log(err);
+  console.error("Unhandled Rejection:", err);
+  process.exit(1);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception:", err);
   process.exit(1);
 });
 

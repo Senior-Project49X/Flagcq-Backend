@@ -15,8 +15,8 @@ const userRoute = [
   },
   {
     method: "GET",
-    path: "/api/user",
-    handler: usersController.UserInfo,
+    path: "/api/users",
+    handler: usersController.getUser,
   },
 ];
 

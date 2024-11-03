@@ -1,8 +1,8 @@
-'use strict';
+"use strict";
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('TournamentPoints', {
+    await queryInterface.createTable("TournamentPoints", {
       id: {
         type: Sequelize.INTEGER,
         allowNull: false,
@@ -21,38 +21,42 @@ module.exports = {
         allowNull: false,
         defaultValue: 0,
       },
-      current_submit: {
-        type: Sequelize.DATE,
+      createdAt: {
         allowNull: false,
-      }
+        type: Sequelize.DATE,
+      },
+      updatedAt: {
+        allowNull: false,
+        type: Sequelize.DATE,
+      },
     });
 
-    await queryInterface.addConstraint('TournamentPoints', {
-      fields: ['users_id'],
-      type: 'foreign key',
-      name: 'FK_TournamentPoints_users_id',
+    await queryInterface.addConstraint("TournamentPoints", {
+      fields: ["users_id"],
+      type: "foreign key",
+      name: "FK_TournamentPoints_users_id",
       references: {
-        table: 'Users',
-        field: 'user_id'
+        table: "Users",
+        field: "user_id",
       },
-      onDelete: 'CASCADE',
-      onUpdate: 'CASCADE'
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
-    await queryInterface.addConstraint('TournamentPoints', {
-      fields: ['tournament_id'],
-      type: 'foreign key',
-      name: 'FK_TournamentPoints_tournament_id',
+    await queryInterface.addConstraint("TournamentPoints", {
+      fields: ["tournament_id"],
+      type: "foreign key",
+      name: "FK_TournamentPoints_tournament_id",
       references: {
-        table: 'Tournament',
-        field: 'id'
+        table: "Tournament",
+        field: "id",
       },
-      onDelete: 'CASCADE',
-      onUpdate: 'CASCADE'
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
   },
 
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.dropTable('TournamentPoints');
-  }
+    await queryInterface.dropTable("TournamentPoints");
+  },
 };

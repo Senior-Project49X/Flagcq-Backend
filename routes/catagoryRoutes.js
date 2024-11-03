@@ -18,6 +18,16 @@ const categoryRoute = [
     path: "/api/categories/{id}",
     handler: categoryController.deleteCategory,
   },
+  {
+    method: "GET",
+    path: "/api/categories/{id}",
+    handler: categoryController.getCategoriesById,
+  },
+  {
+    method: "GET",
+    path: "/api/categories/name/{name}",
+    handler: categoryController.getCategoriesByNames,
+  },
 ];
 
 module.exports = categoryRoute;

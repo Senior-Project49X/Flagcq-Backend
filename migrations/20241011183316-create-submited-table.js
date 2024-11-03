@@ -1,41 +1,48 @@
-'use strict';
+"use strict";
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('Users', {
-      user_id: {
+    await queryInterface.createTable("Submited", {
+      users_id: {
         type: Sequelize.UUID,
         allowNull: false,
-        primaryKey: true,
+        references: {
+          model: "Users",
+          key: "user_id",
+        },
+        onUpdate: "CASCADE",
+        onDelete: "CASCADE",
       },
-      student_id: {
+      question_id: {
         type: Sequelize.INTEGER,
-        allowNull: true,
+        allowNull: false,
+        references: {
+          model: "Questions",
+          key: "id",
+        },
+        onUpdate: "CASCADE",
+        onDelete: "CASCADE",
       },
-      itaccount: {
-        type: Sequelize.STRING(255),
+      createdAt: {
+        type: Sequelize.DATE,
         allowNull: false,
       },
-      first_name: {
-        type: Sequelize.STRING(50),
+      updatedAt: {
+        type: Sequelize.DATE,
         allowNull: false,
       },
-      last_name: {
-        type: Sequelize.STRING(50),
-        allowNull: false,
-      },
-      faculty: {
-        type: Sequelize.STRING(50),
-        allowNull: false,
-      },
-      AccType: {
-        type: Sequelize.ENUM('StdAcc', 'MISEmpAcc'),
-        allowNull: false,
-      }
+      primaryKey: true,
+      unique: true,
+      indexes: [
+        {
+          unique: true,
+          fields: ["users_id", "question_id"],
+        },
+      ],
     });
   },
 
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.dropTable('Users');
-  }
+    await queryInterface.dropTable("Submited");
+  },
 };

@@ -47,6 +47,7 @@ const usersController = {
         {
           first_name: user.first_name,
           last_name: user.last_name,
+          AccType: user.AccType,
           faculty: user.faculty,
           student_id: user.student_id,
         },
@@ -78,29 +79,22 @@ const usersController = {
     h.unstate("cmu-oauth-token");
     return h.redirect("/?message=Logout successful").code(200);
   },
-
-  UserInfo: async (request, h) => {
-    try {
-      const token = request.state["cmu-oauth-token"];
-      if (!token) {
-        return h.response({ message: "Unauthorized" }).code(401);
-      }
-
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded || decoded.student_id !== userInfo.student_id) {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-
-      return h.response(decoded).code(200);
-    } catch (err) {
-      console.error(err);
-      if (err.name === "TokenExpiredError") {
-        return h.response({ message: "Token expired" }).code(401);
-      } else if (err.name === "JsonWebTokenError") {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
+  getUser: async (request, h) => {
+    const token = request.state["cmu-oauth-token"];
+    if (!token) {
       return h.response({ message: "Unauthorized" }).code(401);
     }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+    return h
+      .response({
+        first_name: decoded.first_name,
+        last_name: decoded.last_name,
+        AccType: decoded.AccType,
+        faculty: decoded.faculty,
+        student_id: decoded.student_id,
+      })
+      .code(200);
   },
 };
 
@@ -112,7 +106,7 @@ async function getAccessToken(authorizationCode) {
       {
         params: {
           code: authorizationCode,
-          redirect_uri: process.env.CMU_OAUTH_REDIRECT_URI,
+          redirect_uri: process.env.CMU_OAUTH_REDIRECT_URL,
           client_id: process.env.CMU_OAUTH_CLIENT_ID,
           client_secret: process.env.CMU_OAUTH_CLIENT_SECRET,
           grant_type: "authorization_code",

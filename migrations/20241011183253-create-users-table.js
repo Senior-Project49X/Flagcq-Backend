@@ -6,6 +6,7 @@ module.exports = {
     await queryInterface.createTable("Users", {
       user_id: {
         type: Sequelize.UUID,
+        defaultValue: Sequelize.UUIDV4,
         allowNull: false,
         primaryKey: true,
       },
@@ -13,7 +14,15 @@ module.exports = {
         type: Sequelize.INTEGER,
         allowNull: true,
       },
-      name: {
+      itaccount: {
+        type: Sequelize.STRING(255),
+        allowNull: false,
+      },
+      first_name: {
+        type: Sequelize.STRING(50),
+        allowNull: false,
+      },
+      last_name: {
         type: Sequelize.STRING(50),
         allowNull: false,
       },
@@ -25,9 +34,16 @@ module.exports = {
         type: Sequelize.ENUM("StdAcc", "MISEmpAcc"),
         allowNull: false,
       },
+      createdAt: {
+        allowNull: false,
+        type: Sequelize.DATE,
+      },
+      updatedAt: {
+        allowNull: false,
+        type: Sequelize.DATE,
+      },
     });
   },
-
   down: async (queryInterface, Sequelize) => {
     await queryInterface.dropTable("Users");
   },
