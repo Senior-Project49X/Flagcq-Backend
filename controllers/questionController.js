@@ -2,6 +2,9 @@
 
 const db = require("../models");
 const Question = db.Question;
+const User = db.User;
+const Submited = db.Submited;
+const Point = db.Point;
 
 const questionController = {
   creatQuestion: async (request, h) => {
@@ -68,7 +71,12 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
 
       if (question.Answer === request.payload.Answer) {
         const user = await User.findOne({
@@ -77,7 +85,7 @@ const questionController = {
           },
         });
 
-        if (!user) {s
+        if (!user) {
           return h.response({ message: "User not found" }).code(404);
         }
 
@@ -86,26 +94,30 @@ const questionController = {
           point = await Point.create({ user_id: user.user_id });
         }
 
-        point.points += question.point;
-        await point.save();
+        let submitted = await Submited.findOne({
+          where: {
+            user_id: user.user_id,
+            question_id: question.id,
+          },
+        });
 
-        let submitted = await Submited.findByPk(user.user_id);
         if (!submitted) {
-          submitted = await Submited.create({
+          await Submited.create({
             user_id: user.user_id,
             question_id: question.id,
           });
+
+          point.points += question.point;
+          await point.save();
         }
 
         return h.response({ message: "Correct" }).code(200);
       } else {
         return h.response({ message: "Incorrect" }).code(200);
       }
-    } catch (error) {
-      console.error(error);
-      return h
-        .response({ message: "An error occurred", error: error.message })
-        .code(500);
+    } catch (err) {
+      console.error(err);
+      return h.response({ message: "Internal Server Error" }).code(500);
     }
   },
 

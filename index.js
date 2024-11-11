@@ -14,7 +14,7 @@ const init = async () => {
     host: "0.0.0.0",
     routes: {
       cors: {
-        origin: ["http://localhost:3000", "http://10.10.184.74:3001"],
+        origin: ["http://localhost:3000"],
         headers: [
           "Accept",
           "Authorization",
@@ -27,9 +27,9 @@ const init = async () => {
         maxAge: 600,
         exposedHeaders: ["X-Custom-Header"],
       },
-      files: {
-        relativeTo: Path.join(__dirname, "uploads"),
-      },
+      // files: {
+      //   relativeTo: Path.join(__dirname, "uploads"),
+      // },
     },
   });
 
