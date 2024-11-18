@@ -5,6 +5,7 @@ const sequelize = db.sequelize;
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
 const User = db.User;
+const Point = db.Point;
 
 const usersController = {
   oauthLogin: async (request, h) => {
@@ -43,6 +44,19 @@ const usersController = {
         });
       }
 
+      let point = await Point.findOne({
+        where: {
+          users_id: user.user_id,
+        },
+      });
+
+      if (!point) {
+        point = await Point.create({
+          users_id: user.user_id,
+          points: 0,
+        });
+      }
+
       const token = jwt.sign(
         {
           first_name: user.first_name,
@@ -50,9 +64,10 @@ const usersController = {
           AccType: user.AccType,
           faculty: user.faculty,
           student_id: user.student_id,
+          point: point.points,
         },
         process.env.JWT_SECRET_KEY,
-        { expiresIn: "1h" }
+        { expiresIn: "1d" }
       );
 
       h.state("cmu-oauth-token", token, {
@@ -69,32 +84,63 @@ const usersController = {
       return h.response({ error: "Login failed" }).code(500);
     }
   },
-
   oauthLogout: async (request, h) => {
-    const token = request.state["cmu-oauth-token"];
-    if (!token) {
-      return h.response({ message: "Unauthorized" }).code(401);
-    }
+    try {
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
 
-    h.unstate("cmu-oauth-token");
-    return h.redirect("/?message=Logout successful").code(200);
+      h.unstate("cmu-oauth-token");
+      return h.redirect("/?message=Logout successful").code(200);
+    } catch (err) {
+      console.error(err);
+      return h.response({ error: "Logout failed" }).code(500);
+    }
   },
   getUser: async (request, h) => {
-    const token = request.state["cmu-oauth-token"];
-    if (!token) {
-      return h.response({ message: "Unauthorized" }).code(401);
-    }
+    try {
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-    return h
-      .response({
-        first_name: decoded.first_name,
-        last_name: decoded.last_name,
-        AccType: decoded.AccType,
-        faculty: decoded.faculty,
-        student_id: decoded.student_id,
-      })
-      .code(200);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: { student_id: decoded.student_id },
+      });
+
+      const point = await Point.findOne({
+        where: { users_id: user.user_id },
+      });
+
+      if (!point) {
+        return h.response({ message: "Points not found" }).code(404);
+      }
+
+      return h
+        .response({
+          first_name: decoded.first_name,
+          last_name: decoded.last_name,
+          AccType: decoded.AccType,
+          faculty: decoded.faculty,
+          student_id: decoded.student_id,
+          points: point.points,
+        })
+        .code(200);
+    } catch (err) {
+      console.error(err);
+      if (err.name === "TokenExpiredError") {
+        return h.response({ message: "Token expired" }).code(401);
+      } else if (err.name === "JsonWebTokenError") {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+      return h.response({ error: "Get user failed" }).code(500);
+    }
   },
 };
 

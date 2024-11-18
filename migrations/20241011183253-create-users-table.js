@@ -13,10 +13,12 @@ module.exports = {
       student_id: {
         type: Sequelize.INTEGER,
         allowNull: true,
+        unique: true,
       },
       itaccount: {
         type: Sequelize.STRING(255),
         allowNull: false,
+        unique: true,
       },
       first_name: {
         type: Sequelize.STRING(50),
@@ -44,6 +46,7 @@ module.exports = {
       },
     });
   },
+
   down: async (queryInterface, Sequelize) => {
     await queryInterface.dropTable("Users");
   },

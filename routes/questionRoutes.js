@@ -10,8 +10,8 @@ const questionRoute = [
   },
   {
     method: "GET",
-    path: "/api/questions",
-    handler: questionController.getQuestion,
+    path: "/api/question/tournament",
+    handler: questionController.getQuestionTournament,
   },
   {
     method: "GET",
@@ -32,6 +32,11 @@ const questionRoute = [
     method: "GET",
     path: "/api/question/download/{id}",
     handler: questionController.downloadFile,
+  },
+  {
+    method: "GET",
+    path: "/api/question/practice",
+    handler: questionController.getQuestionPractice,
   },
 ];
 

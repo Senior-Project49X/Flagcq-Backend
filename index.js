@@ -11,7 +11,7 @@ const questionRoute = require("./routes/questionRoutes");
 const init = async () => {
   const server = Hapi.server({
     port: 3001,
-    host: "0.0.0.0",
+    host: "localhost",
     routes: {
       cors: {
         origin: ["http://localhost:3000"],
@@ -27,9 +27,6 @@ const init = async () => {
         maxAge: 600,
         exposedHeaders: ["X-Custom-Header"],
       },
-      // files: {
-      //   relativeTo: Path.join(__dirname, "uploads"),
-      // },
     },
   });
 
