@@ -153,6 +153,7 @@ const questionController = {
         type: question.type,
         categories_name: question.Category?.name || null,
         categories_id: question.categories_id,
+        difficultys_id: question.difficultys_id,
         author: question.createdBy,
       };
 
@@ -206,6 +207,8 @@ const questionController = {
         type: q.type,
         categories_name: q.Category?.name || null,
         categories_id: q.categories_id,
+        difficultys_id: q.difficultys_id,
+        author: q.createdBy,
       }));
 
       return h
