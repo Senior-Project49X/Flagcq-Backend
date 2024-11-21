@@ -118,8 +118,45 @@ const questionController = {
   },
   getQuestionById: async (request, h) => {
     try {
-      const question = await Question.findByPk(request.params.id);
-      return h.response(question).code(200);
+      const questionId = parseInt(request.params.id, 10);
+      if (isNaN(questionId)) {
+        return h.response({ message: "Invalid question ID" }).code(400);
+      }
+
+      const question = await Question.findByPk(questionId, {
+        attributes: {
+          exclude: [
+            "Answer",
+            "createdAt",
+            "createdBy",
+            "file_path",
+            "updatedAt",
+          ],
+        },
+        include: [
+          {
+            model: Category,
+            as: "Category",
+            attributes: ["name"],
+          },
+        ],
+      });
+      if (!question) {
+        return h.response({ message: "Question not found" }).code(404);
+      }
+
+      const data = {
+        id: question.id,
+        title: question.title,
+        description: question.Description,
+        point: question.point,
+        type: question.type,
+        categories_name: question.Category?.name || null,
+        categories_id: question.categories_id,
+        author: question.createdBy,
+      };
+
+      return h.response(data).code(200);
     } catch (error) {
       return h.response({ message: error.message }).code(500);
     }
@@ -143,11 +180,37 @@ const questionController = {
         limit: parseInt(limit),
         offset: parseInt(offset),
         order: [["difficultys_id", "ASC"]],
+        attributes: {
+          exclude: [
+            "Answer",
+            "createdAt",
+            "createdBy",
+            "file_path",
+            "updatedAt",
+          ],
+        },
+        include: [
+          {
+            model: Category,
+            as: "Category",
+            attributes: ["name"],
+          },
+        ],
       });
+
+      const mappedData = question.rows.map((q) => ({
+        id: q.id,
+        title: q.title,
+        description: q.Description,
+        point: q.point,
+        type: q.type,
+        categories_name: q.Category?.name || null,
+        categories_id: q.categories_id,
+      }));
 
       return h
         .response({
-          data: question.rows,
+          data: mappedData,
           totalItems: question.count,
           currentPage: page,
         })

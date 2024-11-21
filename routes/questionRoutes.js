@@ -44,12 +44,12 @@ const questionRoute = [
   },
   {
     method: "GET",
-    path: "/api/question/practice",
+    path: "/api/questions/practice",
     handler: questionController.getQuestionPractice,
   },
   {
     method: "PUT",
-    path: "/api/question/{id}",
+    path: "/api/questions/{id}",
     options: {
       payload: {
         output: "file",
