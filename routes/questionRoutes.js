@@ -6,6 +6,15 @@ const questionRoute = [
   {
     method: "POST",
     path: "/api/question",
+    options: {
+      payload: {
+        output: "file",
+        parse: true,
+        allow: ["multipart/form-data"],
+        multipart: true,
+        maxBytes: 209715200,
+      },
+    },
     handler: questionController.creatQuestion,
   },
   {
@@ -37,6 +46,20 @@ const questionRoute = [
     method: "GET",
     path: "/api/question/practice",
     handler: questionController.getQuestionPractice,
+  },
+  {
+    method: "PUT",
+    path: "/api/question/{id}",
+    options: {
+      payload: {
+        output: "file",
+        parse: true,
+        allow: ["multipart/form-data"],
+        multipart: true,
+        maxBytes: 209715200,
+      },
+    },
+    handler: questionController.updateQuestion,
   },
 ];
 

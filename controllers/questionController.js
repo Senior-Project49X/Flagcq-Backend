@@ -2,6 +2,8 @@
 
 const db = require("../models");
 const jwt = require("jsonwebtoken");
+const fs = require("fs");
+const path = require("path");
 const Question = db.Question;
 const User = db.User;
 const Submited = db.Submited;
@@ -19,7 +21,13 @@ const questionController = {
         point,
         difficultys_id,
         type,
+        file,
       } = request.payload;
+
+      const parsedPoint = Number(point);
+      if (isNaN(parsedPoint)) {
+        return h.response({ message: "Valid Point is required" }).code(400);
+      }
 
       const token = request.state["cmu-oauth-token"];
       if (!token) {
@@ -31,18 +39,21 @@ const questionController = {
         return h.response({ message: "Invalid token" }).code(401);
       }
 
-      const file = request.payload.file;
       let file_path = null;
-      if (file && file.hapi) {
-        const uploadDir = path.join(__dirname, "uploads");
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir);
-        }
+      if (file && file.filename) {
+        const fileName = `${file.filename}`;
+        const filePath = path.join(__dirname, "..", "uploads", fileName);
 
-        const filename = file.hapi.filename;
-        const data = file._data;
-        fs.writeFileSync(path.join(uploadDir, filename), data);
-        file_path = filename;
+        try {
+          const fileData = fs.readFileSync(file.path);
+          fs.writeFileSync(filePath, fileData);
+          file_path = fileName;
+        } catch (err) {
+          console.error("Error writing file:", err);
+          return h.response({ message: "Failed to upload file" }).code(500);
+        }
+      } else if (file) {
+        return h.response({ message: "Invalid file structure" }).code(400);
       }
 
       const catagory = await Category.findOne({
@@ -52,22 +63,20 @@ const questionController = {
         attributes: ["id"],
       });
 
-      const id = catagory.id;
-
-      if (!id) {
+      if (!catagory) {
         return h.response({ message: "Category not found" }).code(404);
       }
 
       const question = await Question.create({
-        categories_id: id,
+        categories_id: catagory.id,
         title,
         Description,
         Answer,
-        point,
+        point: parsedPoint,
         difficultys_id,
         file_path,
         type,
-        createdBy: decoded.first_name + " " + decoded.last_name,
+        createdBy: `${decoded.first_name} ${decoded.last_name}`,
       });
       return h.response(question).code(201);
     } catch (error) {
@@ -161,33 +170,59 @@ const questionController = {
         Answer,
         point,
         difficultys_id,
-        file_path,
         type,
+        file,
       } = request.payload;
 
-      const catagory = await Category.findOne({
-        where: {
-          name: categories_id,
-        },
-        attributes: ["id"],
-      });
+      let file_path = question.file_path;
+      if (file && file.filename) {
+        const fileName = `${file.filename}`;
+        const filePath = path.join(__dirname, "..", "uploads", fileName);
 
-      if (!id) {
-        return h.response({ message: "Category not found" }).code(404);
+        try {
+          const fileData = fs.readFileSync(file.path);
+          fs.writeFileSync(filePath, fileData);
+          file_path = fileName;
+        } catch (err) {
+          console.error("Error writing file:", err);
+          return h.response({ message: "Failed to upload file" }).code(500);
+        }
+      } else if (file) {
+        return h.response({ message: "Invalid file structure" }).code(400);
       }
 
-      question.categories_id = catagory.id;
-      question.title = title;
-      question.Description = Description;
-      question.Answer = Answer;
-      question.point = point;
-      question.difficultys_id = difficultys_id;
+      if (categories_id) {
+        const category = await Category.findOne({
+          where: { name: categories_id },
+          attributes: ["id"],
+        });
+
+        if (!category) {
+          return h.response({ message: "Category not found" }).code(404);
+        }
+        question.categories_id = category.id;
+      }
+
+      if (title !== undefined) question.title = title;
+      if (Description !== undefined) question.Description = Description;
+      if (Answer !== undefined) question.Answer = Answer;
+      if (point !== undefined) {
+        const parsedPoint = Number(point);
+        if (isNaN(parsedPoint)) {
+          return h.response({ message: "Valid Point is required" }).code(400);
+        }
+        question.point = parsedPoint;
+      }
+      if (difficultys_id !== undefined)
+        question.difficultys_id = difficultys_id;
+      if (type !== undefined) question.type = type;
+
       question.file_path = file_path;
-      question.type = type;
 
       await question.save();
       return h.response(question).code(200);
     } catch (error) {
+      console.error("Error in updateQuestion:", error.message);
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -258,12 +293,14 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
-      const filePath = path.join(__dirname, "uploads", question.file_path);
-      if (!fs.existsSync(filePath)) {
-        return h.response({ message: "File not found" }).code(404);
-      }
+      const filePath = path.join(
+        __dirname,
+        "..",
+        "uploads",
+        question.file_path
+      );
 
-      return h.file(question.file_path);
+      return h.file(filePath);
     } catch (error) {
       return h.response({ message: error.message }).code(500);
     }
