@@ -303,7 +303,7 @@ const questionController = {
   },
   checkAnswer: async (request, h) => {
     try {
-      const {Answer, id} = request.payload;
+      const { Answer, id } = request.payload;
       const question = await Question.findByPk(id);
       if (!question) {
         return h.response({ message: "Question not found" }).code(404);
@@ -336,7 +336,18 @@ const questionController = {
         });
 
         if (!point) {
-          return h.response({message: "Point not found"}).code(404);
+          return h.response({ message: "Point not found" }).code(404);
+        }
+
+        const existingSubmission = await Submited.findOne({
+          where: {
+            users_id: user.user_id,
+            question_id: question.id,
+          },
+        });
+
+        if (existingSubmission) {
+          return h.response({ message: "Already submitted" }).code(200);
         }
 
         await Submited.create({

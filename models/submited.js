@@ -13,6 +13,7 @@ module.exports = (sequelize) => {
           model: "Users",
           key: "user_id",
         },
+        unique: "user_question_unique",
       },
       question_id: {
         type: DataTypes.INTEGER,
@@ -21,6 +22,7 @@ module.exports = (sequelize) => {
           model: "Questions",
           key: "id",
         },
+        unique: "user_question_unique",
       },
     },
     {
