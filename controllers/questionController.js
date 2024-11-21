@@ -303,7 +303,8 @@ const questionController = {
   },
   checkAnswer: async (request, h) => {
     try {
-      const question = await Question.findByPk(request.params.id);
+      const {Answer, id} = request.payload;
+      const question = await Question.findByPk(id);
       if (!question) {
         return h.response({ message: "Question not found" }).code(404);
       }
@@ -319,7 +320,7 @@ const questionController = {
       }
 
       const answer = "CTFCQ{" + question.Answer + "}";
-      if (answer === request.payload.Answer) {
+      if (answer === Answer) {
         const user = await User.findOne({
           where: {
             student_id: decoded.student_id,
@@ -330,9 +331,12 @@ const questionController = {
           return h.response({ message: "User not found" }).code(404);
         }
 
-        let point = await Point.findByPk(user.user_id);
+        let point = await Point.findOne({
+          where: { users_id: user.user_id },
+        });
+
         if (!point) {
-          point = await Point.create({ user_id: user.user_id });
+          return h.response({message: "Point not found"}).code(404);
         }
 
         await Submited.create({
