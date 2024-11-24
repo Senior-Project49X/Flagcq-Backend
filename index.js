@@ -26,7 +26,12 @@ const init = async () => {
         additionalHeaders: ["X-Requested-With"],
         credentials: true,
         maxAge: 600,
-        exposedHeaders: ["X-Custom-Header"],
+        exposedHeaders: [
+          "X-Custom-Header",
+          "Content-Disposition",
+          "Content-Length",
+          "Content-Type",
+        ],
       },
     },
   });
