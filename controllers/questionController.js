@@ -374,15 +374,24 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
-      const filePath = path.join(
+      const filePath = path.resolve(
         __dirname,
         "..",
         "uploads",
         question.file_path
       );
 
-      return h.file(filePath);
+      return h.file(filePath, {
+        confine: false,
+        mode: "attachment",
+        filename: question.file_path,
+        headers: {
+          "Content-Disposition": `attachment; filename=${question.file_path}`,
+        },
+      });
     } catch (error) {
+      console.log(error);
+
       return h.response({ message: error.message }).code(500);
     }
   },

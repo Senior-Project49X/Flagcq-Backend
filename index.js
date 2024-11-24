@@ -7,6 +7,7 @@ const Hello = require("./routes/hello");
 const categoryRoute = require("./routes/catagoryRoutes");
 const userRoute = require("./routes/userRoute");
 const questionRoute = require("./routes/questionRoutes");
+const Inert = require("@hapi/inert");
 
 const init = async () => {
   const server = Hapi.server({
@@ -58,6 +59,14 @@ const init = async () => {
     console.error("Unable to connect to the database:", error);
     process.exit(1);
   }
+  await server
+    .register(Inert)
+    .then(() => {
+      console.log("Inert plugin registered successfully");
+    })
+    .catch((err) => {
+      console.error("Failed to register Inert:", err);
+    });
 
   await sequelize.sync({ alter: true });
 
