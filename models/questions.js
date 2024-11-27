@@ -19,6 +19,7 @@ module.exports = (sequelize) => {
       title: {
         type: DataTypes.STRING(50),
         allowNull: false,
+        unique: true,
       },
       Description: {
         type: DataTypes.STRING(500),
@@ -38,6 +39,7 @@ module.exports = (sequelize) => {
       },
       file_path: {
         type: DataTypes.STRING(500),
+        unique: true,
       },
       type: {
         type: DataTypes.ENUM("Practice", "Tournament"),

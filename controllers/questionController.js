@@ -39,6 +39,22 @@ const questionController = {
         return h.response({ message: "Invalid token" }).code(401);
       }
 
+      const existingTitle = await Question.findOne({
+        where: { title },
+      });
+
+      if (existingTitle) {
+        return h.response({ message: "Title already exists" }).code(409);
+      }
+
+      const existingFile = await Question.findOne({
+        where: { file_path: file.filename },
+      });
+
+      if (existingFile) {
+        return h.response({ message: "File already exists" }).code(409);
+      }
+
       let file_path = null;
       if (file && file.filename) {
         const fileName = `${file.filename}`;
@@ -52,8 +68,6 @@ const questionController = {
           console.error("Error writing file:", err);
           return h.response({ message: "Failed to upload file" }).code(500);
         }
-      } else if (file) {
-        return h.response({ message: "Invalid file structure" }).code(400);
       }
 
       const catagory = await Category.findOne({
@@ -84,38 +98,63 @@ const questionController = {
       return h.response({ message: error.message }).code(500);
     }
   },
-  getQuestionTournament: async (request, h) => {
-    try {
-      const { page = 1, limit = 16, category, Difficulty } = request.query;
-      const offset = (page - 1) * limit;
-      const where = { type: "Tournament" };
+  // getQuestionTournament: async (request, h) => {
+  //   try {
+  //     const { page = 1, limit = 16, category, Difficulty } = request.query;
+  //     const offset = (page - 1) * limit;
+  //     const where = { type: "Tournament" };
 
-      if (category) {
-        where.categories_id = category;
-      }
+  //     if (category) {
+  //       where.categories_id = category;
+  //     }
 
-      if (Difficulty) {
-        where.difficultys_id = Difficulty;
-      }
+  //     if (Difficulty) {
+  //       where.difficultys_id = Difficulty;
+  //     }
 
-      const question = await Question.findAndCountAll({
-        where,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        order: [["difficultys_id", "ASC"]],
-      });
+  //     const token = request.state["cmu-oauth-token"];
+  //     if (!token) {
+  //       return h.response({ message: "Unauthorized" }).code(401);
+  //     }
 
-      return h
-        .response({
-          data: question.rows,
-          totalItems: question.count,
-          currentPage: page,
-        })
-        .code(200);
-    } catch (error) {
-      return h.response({ message: error.message }).code(500);
-    }
-  },
+  //     const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+  //     if (!decoded) {
+  //       return h.response({ message: "Invalid token" }).code(401);
+  //     }
+
+  //     const user = await User.findOne({
+  //       where: { student_id: decoded.student_id },
+  //     });
+
+  //     if (!user) {
+  //       return h.response({ message: "User not found" }).code(404);
+  //     }
+
+  //     const question = await Question.findAndCountAll({
+  //       where,
+  //       limit: parseInt(limit),
+  //       offset: parseInt(offset),
+  //       order: [["difficultys_id", "ASC"]],
+  //     });
+
+  //     const solvedQuestions = await Submited.findAll({
+  //       where: { users_id: decoded.user_id },
+  //       attributes: ["question_id"],
+  //     });
+
+  //     const solvedIds = solvedQuestions.map((item) => item.question_id);
+
+  //     return h
+  //       .response({
+  //         data: question.rows,
+  //         totalItems: question.count,
+  //         currentPage: page,
+  //       })
+  //       .code(200);
+  //   } catch (error) {
+  //     return h.response({ message: error.message }).code(500);
+  //   }
+  // },
   getQuestionById: async (request, h) => {
     try {
       const questionId = parseInt(request.params.id, 10);
@@ -123,15 +162,23 @@ const questionController = {
         return h.response({ message: "Invalid question ID" }).code(400);
       }
 
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: { student_id: decoded.student_id },
+      });
+
       const question = await Question.findByPk(questionId, {
         attributes: {
-          exclude: [
-            "Answer",
-            "createdAt",
-            "createdBy",
-            "file_path",
-            "updatedAt",
-          ],
+          exclude: ["Answer", "createdAt", "createdBy", "updatedAt", "type"],
         },
         include: [
           {
@@ -141,20 +188,26 @@ const questionController = {
           },
         ],
       });
+
       if (!question) {
         return h.response({ message: "Question not found" }).code(404);
       }
+
+      const isSolved = await Submited.findOne({
+        where: { users_id: user.user_id, question_id: question.id },
+      });
 
       const data = {
         id: question.id,
         title: question.title,
         description: question.Description,
         point: question.point,
-        type: question.type,
         categories_name: question.Category?.name || null,
-        categories_id: question.categories_id,
+        // categories_id: question.categories_id,
         difficultys_id: question.difficultys_id,
+        file_path: question.file_path,
         author: question.createdBy,
+        solved: !!isSolved,
       };
 
       return h.response(data).code(200);
@@ -162,18 +215,60 @@ const questionController = {
       return h.response({ message: error.message }).code(500);
     }
   },
-  getQuestionPractice: async (request, h) => {
+  getQuestion: async (request, h) => {
     try {
-      const { page = 1, limit = 16, category, Difficulty } = request.query;
+      const {
+        page = 1,
+        limit = 16,
+        category,
+        Difficulty,
+        type,
+      } = request.query;
+
       const offset = (page - 1) * limit;
-      const where = { type: "Practice" };
+      const where = {};
+
+      const validTypes = ["Practice", "Tournament"];
+
+      if (type) {
+        if (!validTypes.includes(type)) {
+          return h.response({ message: "Invalid type parameter" }).code(400);
+        }
+        where.type = type;
+      }
 
       if (category) {
+        const validCategory = await Category.findOne({
+          where: { id: category },
+          attributes: ["id"],
+        });
+
+        if (!validCategory) {
+          return h.response({ message: "Category not found" }).code(404);
+        }
         where.categories_id = category;
       }
 
       if (Difficulty) {
         where.difficultys_id = Difficulty;
+      }
+
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: { student_id: decoded.student_id },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
       }
 
       const question = await Question.findAndCountAll({
@@ -182,13 +277,7 @@ const questionController = {
         offset: parseInt(offset),
         order: [["difficultys_id", "ASC"]],
         attributes: {
-          exclude: [
-            "Answer",
-            "createdAt",
-            "createdBy",
-            "file_path",
-            "updatedAt",
-          ],
+          exclude: ["Answer", "createdAt", "createdBy", "updatedAt", "type"],
         },
         include: [
           {
@@ -199,16 +288,24 @@ const questionController = {
         ],
       });
 
+      const solvedQuestions = await Submited.findAll({
+        where: { users_id: user.user_id },
+        attributes: ["question_id"],
+      });
+
+      const solvedIds = solvedQuestions.map((item) => item.question_id);
+
       const mappedData = question.rows.map((q) => ({
         id: q.id,
         title: q.title,
-        description: q.Description,
+        // description: q.Description,
         point: q.point,
-        type: q.type,
         categories_name: q.Category?.name || null,
-        categories_id: q.categories_id,
+        // categories_id: q.categories_id,
         difficultys_id: q.difficultys_id,
+        file_path: q.file_path,
         author: q.createdBy,
+        solved: solvedIds.includes(q.id),
       }));
 
       return h
@@ -239,6 +336,22 @@ const questionController = {
         type,
         file,
       } = request.payload;
+
+      const existingTitle = await Question.findOne({
+        where: { title },
+      });
+
+      if (existingTitle) {
+        return h.response({ message: "Title already exists" }).code(409);
+      }
+
+      const existingFile = await Question.findOne({
+        where: { file_path: file.filename },
+      });
+
+      if (existingFile) {
+        return h.response({ message: "File already exists" }).code(409);
+      }
 
       let file_path = question.file_path;
       if (file && file.filename) {
@@ -279,9 +392,25 @@ const questionController = {
         }
         question.point = parsedPoint;
       }
-      if (difficultys_id !== undefined)
+
+      const validDifficulties = ["Easy", "Medium", "Hard"];
+      const validTypes = ["Practice", "Tournament"];
+
+      if (difficultys_id !== undefined) {
+        if (!validDifficulties.includes(difficultys_id)) {
+          return h
+            .response({ message: "Invalid difficulty parameter" })
+            .code(400);
+        }
         question.difficultys_id = difficultys_id;
-      if (type !== undefined) question.type = type;
+      }
+
+      if (type !== undefined) {
+        if (!validTypes.includes(type)) {
+          return h.response({ message: "Invalid type parameter" }).code(400);
+        }
+        question.type = type;
+      }
 
       question.file_path = file_path;
 
@@ -294,8 +423,28 @@ const questionController = {
   },
   deleteQuestion: async (request, h) => {
     try {
-      const question = await Question.findByPk(request.params.id);
+      const questionId = parseInt(request.params.id, 10);
+      if (isNaN(questionId)) {
+        return h.response({ message: "Invalid question ID" }).code(400);
+      }
+
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      const question = await Question.findByPk(questionId);
+      if (!question) {
+        return h.response({ message: "Question not found" }).code(404);
+      }
+
       await question.destroy();
+
       return h.response({ message: "Question has been deleted" }).code(200);
     } catch (error) {
       return h.response({ message: error.message }).code(500);
@@ -358,9 +507,9 @@ const questionController = {
         point.points += question.point;
         await point.save();
 
-        return h.response({ message: "Correct" }).code(200);
+        return h.response({ message: "Correct", solve: true }).code(200);
       } else {
-        return h.response({ message: "Incorrect" }).code(200);
+        return h.response({ message: "Incorrect", solve: false }).code(200);
       }
     } catch (err) {
       console.error(err);
@@ -372,6 +521,12 @@ const questionController = {
       const question = await Question.findByPk(request.params.id);
       if (!question) {
         return h.response({ message: "Question not found" }).code(404);
+      }
+
+      if (!question.file_path) {
+        return h
+          .response({ message: "No file available for this question" })
+          .code(400);
       }
 
       const filePath = path.resolve(
@@ -391,7 +546,6 @@ const questionController = {
       });
     } catch (error) {
       console.log(error);
-
       return h.response({ message: error.message }).code(500);
     }
   },

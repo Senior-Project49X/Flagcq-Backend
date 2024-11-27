@@ -17,11 +17,11 @@ const questionRoute = [
     },
     handler: questionController.creatQuestion,
   },
-  {
-    method: "GET",
-    path: "/api/question/tournament",
-    handler: questionController.getQuestionTournament,
-  },
+  // {
+  //   method: "GET",
+  //   path: "/api/question/tournament",
+  //   handler: questionController.getQuestionTournament,
+  // },
   {
     method: "GET",
     path: "/api/question/{id}",
@@ -44,8 +44,8 @@ const questionRoute = [
   },
   {
     method: "GET",
-    path: "/api/questions/practice",
-    handler: questionController.getQuestionPractice,
+    path: "/api/questions",
+    handler: questionController.getQuestion,
   },
   {
     method: "PUT",
