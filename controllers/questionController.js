@@ -239,14 +239,14 @@ const questionController = {
 
       if (category) {
         const validCategory = await Category.findOne({
-          where: { id: category },
+          where: { name: category },
           attributes: ["id"],
         });
 
         if (!validCategory) {
           return h.response({ message: "Category not found" }).code(404);
         }
-        where.categories_id = category;
+        where.categories_id = validCategory.id;
       }
 
       if (Difficulty) {
