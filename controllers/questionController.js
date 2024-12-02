@@ -9,6 +9,9 @@ const User = db.User;
 const Submited = db.Submited;
 const Point = db.Point;
 const Category = db.Category;
+const Mode = db.Mode;
+const { Op } = require("sequelize");
+const QuestionMode = db.QuestionMode;
 
 const questionController = {
   creatQuestion: async (request, h) => {
@@ -20,13 +23,32 @@ const questionController = {
         Answer,
         point,
         difficultys_id,
-        type,
         file,
+        Modes, //array of modes
       } = request.payload;
 
       const parsedPoint = Number(point);
       if (isNaN(parsedPoint)) {
         return h.response({ message: "Valid Point is required" }).code(400);
+      }
+
+      const validDifficulties = ["Easy", "Medium", "Hard"];
+      if (!validDifficulties.includes(difficultys_id)) {
+        return h
+          .response({ message: "Invalid difficulty parameter" })
+          .code(400);
+      }
+
+      if (!title || title.trim() === "") {
+        return h.response({ error: "Title is required" }).code(400);
+      }
+
+      if (!Description || Description.trim() === "") {
+        return h.response({ error: "Description is required" }).code(400);
+      }
+
+      if (!Answer || Answer.trim() === "") {
+        return h.response({ error: "Answer is required" }).code(400);
       }
 
       const token = request.state["cmu-oauth-token"];
@@ -55,30 +77,40 @@ const questionController = {
         return h.response({ message: "File already exists" }).code(409);
       }
 
-      let file_path = null;
-      if (file && file.filename) {
-        const fileName = `${file.filename}`;
-        const filePath = path.join(__dirname, "..", "uploads", fileName);
-
-        try {
-          const fileData = fs.readFileSync(file.path);
-          fs.writeFileSync(filePath, fileData);
-          file_path = fileName;
-        } catch (err) {
-          console.error("Error writing file:", err);
-          return h.response({ message: "Failed to upload file" }).code(500);
-        }
+      const parsedCategoriesId = parseInt(categories_id, 10);
+      if (isNaN(parsedCategoriesId)) {
+        return h.response({ message: "Invalid category ID" }).code(400);
       }
 
       const catagory = await Category.findOne({
         where: {
-          name: categories_id,
+          id: parsedCategoriesId,
         },
         attributes: ["id"],
       });
 
       if (!catagory) {
         return h.response({ message: "Category not found" }).code(404);
+      }
+
+      let file_path = null;
+      if (file && file.filename) {
+        const fileName = `${file.filename}`;
+        const uploadDirectory = path.join(__dirname, "..", "uploads");
+        const filePath = path.join(uploadDirectory, fileName);
+
+        try {
+          await fs.promises.mkdir(uploadDirectory, { recursive: true });
+
+          await fs.promises.writeFile(
+            filePath,
+            await fs.promises.readFile(file.path)
+          );
+          file_path = fileName;
+        } catch (err) {
+          console.error("Error uploading file:", err);
+          return h.response({ message: "Failed to upload file" }).code(500);
+        }
       }
 
       const question = await Question.create({
@@ -89,72 +121,43 @@ const questionController = {
         point: parsedPoint,
         difficultys_id,
         file_path,
-        type,
         createdBy: `${decoded.first_name} ${decoded.last_name}`,
       });
+
+      let modeId = [];
+      if (Modes.includes("None")) {
+        const noneMode = await Mode.findOne({ where: { name: "None" } });
+        if (!noneMode) {
+          return h.response({ message: "Mode 'None' not found" }).code(404);
+        }
+        modeId = [noneMode.id];
+      } else {
+        const validModes = await Mode.findAll({
+          where: {
+            name: { [Op.in]: Modes },
+          },
+        });
+
+        if (validModes.length !== Modes.length) {
+          return h.response({ message: "Some modes are invalid" }).code(400);
+        }
+
+        modeId = validModes.map((mode) => mode.id);
+      }
+
+      const questionMode = modeId.map((mode) => ({
+        question_id: question.id,
+        mode_id: mode,
+      }));
+
+      await QuestionMode.bulkCreate(questionMode);
+
       return h.response(question).code(201);
     } catch (error) {
       console.error(error);
       return h.response({ message: error.message }).code(500);
     }
   },
-  // getQuestionTournament: async (request, h) => {
-  //   try {
-  //     const { page = 1, limit = 16, category, Difficulty } = request.query;
-  //     const offset = (page - 1) * limit;
-  //     const where = { type: "Tournament" };
-
-  //     if (category) {
-  //       where.categories_id = category;
-  //     }
-
-  //     if (Difficulty) {
-  //       where.difficultys_id = Difficulty;
-  //     }
-
-  //     const token = request.state["cmu-oauth-token"];
-  //     if (!token) {
-  //       return h.response({ message: "Unauthorized" }).code(401);
-  //     }
-
-  //     const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-  //     if (!decoded) {
-  //       return h.response({ message: "Invalid token" }).code(401);
-  //     }
-
-  //     const user = await User.findOne({
-  //       where: { student_id: decoded.student_id },
-  //     });
-
-  //     if (!user) {
-  //       return h.response({ message: "User not found" }).code(404);
-  //     }
-
-  //     const question = await Question.findAndCountAll({
-  //       where,
-  //       limit: parseInt(limit),
-  //       offset: parseInt(offset),
-  //       order: [["difficultys_id", "ASC"]],
-  //     });
-
-  //     const solvedQuestions = await Submited.findAll({
-  //       where: { users_id: decoded.user_id },
-  //       attributes: ["question_id"],
-  //     });
-
-  //     const solvedIds = solvedQuestions.map((item) => item.question_id);
-
-  //     return h
-  //       .response({
-  //         data: question.rows,
-  //         totalItems: question.count,
-  //         currentPage: page,
-  //       })
-  //       .code(200);
-  //   } catch (error) {
-  //     return h.response({ message: error.message }).code(500);
-  //   }
-  // },
   getQuestionById: async (request, h) => {
     try {
       const questionId = parseInt(request.params.id, 10);
@@ -178,7 +181,7 @@ const questionController = {
 
       const question = await Question.findByPk(questionId, {
         attributes: {
-          exclude: ["Answer", "createdAt", "createdBy", "updatedAt", "type"],
+          exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
         },
         include: [
           {
@@ -203,7 +206,6 @@ const questionController = {
         description: question.Description,
         point: question.point,
         categories_name: question.Category?.name || null,
-        // categories_id: question.categories_id,
         difficultys_id: question.difficultys_id,
         file_path: question.file_path,
         author: question.createdBy,
@@ -217,25 +219,12 @@ const questionController = {
   },
   getQuestion: async (request, h) => {
     try {
-      const {
-        page = 1,
-        limit = 16,
-        category,
-        Difficulty,
-        type,
-      } = request.query;
+      const { page = 1, category, Difficulty, mode } = request.query;
 
+      const limit = 12;
       const offset = (page - 1) * limit;
+      const validDifficulties = ["Easy", "Medium", "Hard"];
       const where = {};
-
-      const validTypes = ["Practice", "Tournament"];
-
-      if (type) {
-        if (!validTypes.includes(type)) {
-          return h.response({ message: "Invalid type parameter" }).code(400);
-        }
-        where.type = type;
-      }
 
       if (category) {
         const validCategory = await Category.findOne({
@@ -250,6 +239,11 @@ const questionController = {
       }
 
       if (Difficulty) {
+        if (!validDifficulties.includes(Difficulty)) {
+          return h
+            .response({ message: "Invalid difficulty parameter" })
+            .code(400);
+        }
         where.difficultys_id = Difficulty;
       }
 
@@ -271,13 +265,36 @@ const questionController = {
         return h.response({ message: "User not found" }).code(404);
       }
 
+      if (mode) {
+        const validMode = await Mode.findOne({
+          where: { name: mode },
+          attributes: ["id"],
+        });
+
+        if (!validMode) {
+          return h.response({ message: "Mode not found" }).code(404);
+        }
+
+        where.id = {
+          [Op.in]: (
+            await QuestionMode.findAll({
+              where: { mode_id: validMode.id },
+              attributes: ["question_id"],
+            })
+          ).map((item) => item.question_id),
+        };
+      }
+
       const question = await Question.findAndCountAll({
         where,
         limit: parseInt(limit),
         offset: parseInt(offset),
-        order: [["difficultys_id", "ASC"]],
+        order: [
+          ["difficultys_id", "ASC"],
+          ["id", "ASC"],
+        ],
         attributes: {
-          exclude: ["Answer", "createdAt", "createdBy", "updatedAt", "type"],
+          exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
         },
         include: [
           {
@@ -298,10 +315,8 @@ const questionController = {
       const mappedData = question.rows.map((q) => ({
         id: q.id,
         title: q.title,
-        // description: q.Description,
         point: q.point,
         categories_name: q.Category?.name || null,
-        // categories_id: q.categories_id,
         difficultys_id: q.difficultys_id,
         file_path: q.file_path,
         author: q.createdBy,
@@ -320,8 +335,24 @@ const questionController = {
     }
   },
   updateQuestion: async (request, h) => {
+    const transaction = await sequelize.transaction();
     try {
-      const question = await Question.findByPk(request.params.id);
+      const questionId = parseInt(request.params.id, 10);
+      if (isNaN(questionId)) {
+        return h.response({ message: "Invalid question ID" }).code(400);
+      }
+
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      const question = await Question.findByPk(questionId);
       if (!question) {
         return h.response({ message: "Question not found" }).code(404);
       }
@@ -333,41 +364,46 @@ const questionController = {
         Answer,
         point,
         difficultys_id,
-        type,
+        Modes,
         file,
       } = request.payload;
 
       const existingTitle = await Question.findOne({
-        where: { title },
+        where: { title, id: { [Op.ne]: questionId } },
       });
-
       if (existingTitle) {
         return h.response({ message: "Title already exists" }).code(409);
       }
 
-      const existingFile = await Question.findOne({
-        where: { file_path: file.filename },
-      });
-
-      if (existingFile) {
-        return h.response({ message: "File already exists" }).code(409);
+      if (file?.filename) {
+        const existingFile = await Question.findOne({
+          where: { file_path: file.filename },
+        });
+        if (existingFile) {
+          return h.response({ message: "File already exists" }).code(409);
+        }
       }
 
       let file_path = question.file_path;
-      if (file && file.filename) {
-        const fileName = `${file.filename}`;
-        const filePath = path.join(__dirname, "..", "uploads", fileName);
-
-        try {
-          const fileData = fs.readFileSync(file.path);
-          fs.writeFileSync(filePath, fileData);
-          file_path = fileName;
-        } catch (err) {
-          console.error("Error writing file:", err);
-          return h.response({ message: "Failed to upload file" }).code(500);
+      if (file?.filename && file?.path) {
+        if (question.file_path) {
+          try {
+            fs.unlinkSync(
+              path.join(__dirname, "..", "uploads", question.file_path)
+            );
+          } catch (err) {
+            console.warn("Failed to delete old file:", err);
+          }
         }
-      } else if (file) {
-        return h.response({ message: "Invalid file structure" }).code(400);
+
+        const uploadDirectory = path.join(__dirname, "..", "uploads");
+        if (!fs.existsSync(uploadDirectory)) {
+          fs.mkdirSync(uploadDirectory, { recursive: true });
+        }
+
+        const newFilePath = path.join(uploadDirectory, file.filename);
+        fs.writeFileSync(newFilePath, fs.readFileSync(file.path));
+        file_path = file.filename;
       }
 
       if (categories_id) {
@@ -375,7 +411,6 @@ const questionController = {
           where: { name: categories_id },
           attributes: ["id"],
         });
-
         if (!category) {
           return h.response({ message: "Category not found" }).code(404);
         }
@@ -385,6 +420,7 @@ const questionController = {
       if (title !== undefined) question.title = title;
       if (Description !== undefined) question.Description = Description;
       if (Answer !== undefined) question.Answer = Answer;
+
       if (point !== undefined) {
         const parsedPoint = Number(point);
         if (isNaN(parsedPoint)) {
@@ -394,29 +430,49 @@ const questionController = {
       }
 
       const validDifficulties = ["Easy", "Medium", "Hard"];
-      const validTypes = ["Practice", "Tournament"];
-
-      if (difficultys_id !== undefined) {
-        if (!validDifficulties.includes(difficultys_id)) {
-          return h
-            .response({ message: "Invalid difficulty parameter" })
-            .code(400);
-        }
-        question.difficultys_id = difficultys_id;
+      if (difficultys_id && !validDifficulties.includes(difficultys_id)) {
+        return h
+          .response({ message: "Invalid difficulty parameter" })
+          .code(400);
       }
-
-      if (type !== undefined) {
-        if (!validTypes.includes(type)) {
-          return h.response({ message: "Invalid type parameter" }).code(400);
-        }
-        question.type = type;
-      }
+      question.difficultys_id = difficultys_id || question.difficultys_id;
 
       question.file_path = file_path;
 
-      await question.save();
+      if (Modes) {
+        let validModes;
+        if (Modes.includes("none")) {
+          validModes = await Mode.findAll({ where: { name: "none" } });
+          if (!validModes.length) {
+            return h.response({ message: "Mode 'none' not found" }).code(404);
+          }
+        } else {
+          validModes = await Mode.findAll({
+            where: { name: { [Op.in]: Modes } },
+          });
+          if (validModes.length !== Modes.length) {
+            return h.response({ message: "Some modes are invalid" }).code(400);
+          }
+        }
+
+        const newQuestionModes = validModes.map((mode) => ({
+          question_id: questionId,
+          mode_id: mode.id,
+        }));
+
+        await QuestionMode.destroy({
+          where: { question_id: questionId },
+          transaction,
+        });
+        await QuestionMode.bulkCreate(newQuestionModes, { transaction });
+      }
+
+      await question.save({ transaction });
+      await transaction.commit();
+
       return h.response(question).code(200);
     } catch (error) {
+      if (transaction) await transaction.rollback();
       console.error("Error in updateQuestion:", error.message);
       return h.response({ message: error.message }).code(500);
     }
@@ -441,6 +497,27 @@ const questionController = {
       const question = await Question.findByPk(questionId);
       if (!question) {
         return h.response({ message: "Question not found" }).code(404);
+      }
+
+      if (question.file_path) {
+        const filePath = path.resolve(
+          __dirname,
+          "..",
+          "uploads",
+          question.file_path
+        );
+
+        try {
+          await fs.promises.access(filePath);
+          await fs.promises.unlink(filePath);
+        } catch (err) {
+          if (err.code !== "ENOENT") {
+            console.error("Error deleting file:", err);
+            return h
+              .response({ message: "Failed to delete associated file" })
+              .code(500);
+          }
+        }
       }
 
       await question.destroy();

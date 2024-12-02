@@ -4,13 +4,6 @@
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     await queryInterface.sequelize.query(`
-      CREATE TYPE "Question_type" AS ENUM (
-        'Practice',
-        'Tournament'
-      );
-    `);
-
-    await queryInterface.sequelize.query(`
       CREATE TYPE "AccountTypes" AS ENUM (
         'StdAcc',
         'MISEmpAcc'
@@ -27,7 +20,6 @@ module.exports = {
   },
 
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.sequelize.query(`DROP TYPE "Question_type";`);
     await queryInterface.sequelize.query(`DROP TYPE "AccountTypes";`);
     await queryInterface.sequelize.query(`DROP TYPE "Difficulties";`);
   },

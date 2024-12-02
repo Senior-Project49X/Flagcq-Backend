@@ -26,6 +26,11 @@ if (config.use_env_variable) {
 const Category = require("./categories")(sequelize, Sequelize.DataTypes);
 const Point = require("./points")(sequelize, Sequelize.DataTypes);
 const Question = require("./questions")(sequelize, Sequelize.DataTypes);
+const Mode = require("./modes")(sequelize, Sequelize.DataTypes);
+const QuestionMode = require("./questionsmodes")(
+  sequelize,
+  Sequelize.DataTypes
+);
 const User = require("./users")(sequelize, Sequelize.DataTypes);
 const Submited = require("./submited")(sequelize, Sequelize.DataTypes);
 const Team = require("./teams")(sequelize, Sequelize.DataTypes);
@@ -40,6 +45,8 @@ const TournamentPoints = require("./tournamentpoints")(
 db.Category = Category;
 db.Point = Point;
 db.Question = Question;
+db.Mode = Mode;
+db.QuestionMode = QuestionMode;
 db.User = User;
 db.Submited = Submited;
 db.Team = Team;

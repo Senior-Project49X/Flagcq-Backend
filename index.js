@@ -8,6 +8,7 @@ const categoryRoute = require("./routes/catagoryRoutes");
 const userRoute = require("./routes/userRoute");
 const questionRoute = require("./routes/questionRoutes");
 const Inert = require("@hapi/inert");
+const modeRoute = require("./routes/modesRoutes");
 
 const init = async () => {
   const server = Hapi.server({
@@ -75,10 +76,10 @@ const init = async () => {
 
   await sequelize.sync({ alter: true });
 
-  Hello(server);
   server.route(categoryRoute);
   server.route(userRoute);
   server.route(questionRoute);
+  server.route(modeRoute);
 
   await server.start();
   console.log("Server running on %s", server.info.uri);

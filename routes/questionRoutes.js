@@ -1,6 +1,7 @@
 "use strict";
 const path = require("path");
 const questionController = require("../controllers/questionController");
+const Joi = require("joi");
 
 const questionRoute = [
   {
@@ -10,18 +11,29 @@ const questionRoute = [
       payload: {
         output: "file",
         parse: true,
-        allow: ["multipart/form-data"],
-        multipart: true,
-        maxBytes: 209715200,
+        allow: "multipart/form-data",
+        multipart: {
+          output: "file",
+        },
+        maxBytes: 200 * 1024 * 1024,
+      },
+      validate: {
+        payload: Joi.object({
+          file: Joi.object({
+            filename: Joi.string()
+              .regex(/\.zip$/)
+              .required(),
+            headers: Joi.object({
+              "content-type": Joi.string()
+                .valid("application/zip", "application/x-zip-compressed")
+                .required(),
+            }).unknown(true),
+          }).required(),
+        }),
       },
     },
     handler: questionController.creatQuestion,
   },
-  // {
-  //   method: "GET",
-  //   path: "/api/question/tournament",
-  //   handler: questionController.getQuestionTournament,
-  // },
   {
     method: "GET",
     path: "/api/question/{id}",
@@ -54,9 +66,25 @@ const questionRoute = [
       payload: {
         output: "file",
         parse: true,
-        allow: ["multipart/form-data"],
-        multipart: true,
-        maxBytes: 209715200,
+        allow: "multipart/form-data",
+        multipart: {
+          output: "file",
+        },
+        maxBytes: 200 * 1024 * 1024,
+      },
+      validate: {
+        payload: Joi.object({
+          file: Joi.object({
+            filename: Joi.string()
+              .regex(/\.zip$/)
+              .required(),
+            headers: Joi.object({
+              "content-type": Joi.string()
+                .valid("application/zip", "application/x-zip-compressed")
+                .required(),
+            }).unknown(true),
+          }).required(),
+        }),
       },
     },
     handler: questionController.updateQuestion,

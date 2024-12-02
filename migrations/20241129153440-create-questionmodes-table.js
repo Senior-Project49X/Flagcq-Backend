@@ -3,24 +3,24 @@
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     await queryInterface.createTable(
-      "Submited",
+      "QuestionModes",
       {
-        users_id: {
-          type: Sequelize.UUID,
+        questions_id: {
+          type: Sequelize.INTEGER,
           allowNull: false,
           references: {
-            model: "Users",
-            key: "user_id",
+            model: "Questions",
+            key: "id",
           },
           onUpdate: "CASCADE",
           onDelete: "CASCADE",
           primaryKey: true,
         },
-        question_id: {
+        mode_id: {
           type: Sequelize.INTEGER,
           allowNull: false,
           references: {
-            model: "Questions",
+            model: "Modes",
             key: "id",
           },
           onUpdate: "CASCADE",
@@ -38,8 +38,8 @@ module.exports = {
       },
       {
         uniqueKeys: {
-          unique_users_question: {
-            fields: ["users_id", "question_id"],
+          unique_questions_mode: {
+            fields: ["questions_id", "mode_id"],
           },
         },
       }
@@ -47,6 +47,6 @@ module.exports = {
   },
 
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.dropTable("Submited");
+    await queryInterface.dropTable("QuestionModes");
   },
 };
