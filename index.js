@@ -8,6 +8,7 @@ const categoryRoute = require("./routes/catagoryRoutes");
 const userRoute = require("./routes/userRoute");
 const questionRoute = require("./routes/questionRoutes");
 const Inert = require("@hapi/inert");
+const lbRoute = require("./routes/lbRoute");
 
 const init = async () => {
   const server = Hapi.server({
@@ -79,6 +80,7 @@ const init = async () => {
   server.route(categoryRoute);
   server.route(userRoute);
   server.route(questionRoute);
+  server.route(lbRoute);
 
   await server.start();
   console.log("Server running on %s", server.info.uri);

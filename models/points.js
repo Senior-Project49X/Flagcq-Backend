@@ -26,5 +26,9 @@ module.exports = (sequelize) => {
     }
   );
 
+  Point.associate = function (models) {
+    Point.belongsTo(models.User, { foreignKey: "users_id" });
+  };
+
   return Point;
 };
