@@ -1,5 +1,6 @@
 "use strict";
 
+const path = require("path");
 const usersController = require("../controllers/usersController");
 
 const userRoute = [
@@ -16,7 +17,12 @@ const userRoute = [
   {
     method: "GET",
     path: "/api/users",
-    handler: usersController.getUser,
+    handler: usersController.getUserPractice,
+  },
+  {
+    method: "GET",
+    path: "/api/token",
+    handler: usersController.testToken,
   },
 ];
 

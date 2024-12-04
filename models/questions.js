@@ -40,6 +40,11 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(500),
         unique: true,
       },
+      Practice: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
       createdBy: {
         type: DataTypes.STRING(100),
         allowNull: false,

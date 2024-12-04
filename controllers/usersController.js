@@ -130,7 +130,10 @@ const usersController = {
 
       const allPoints = await Point.findAll({
         attributes: ["users_id", "points"],
-        order: [["points", "DESC"]],
+        order: [
+          ["points", "DESC"],
+          ["updatedAt", "ASC"],
+        ],
       });
 
       const rank = allPoints.findIndex((p) => p.users_id === user.user_id) + 1;
@@ -144,7 +147,7 @@ const usersController = {
           student_id: decoded.student_id,
           email: decoded.email,
           points: point.points,
-          rank,
+          rank: rank,
         })
         .code(200);
     } catch (err) {
@@ -201,6 +204,29 @@ const usersController = {
   //     return h.response({ error: "Get user failed" }).code(500);
   //   }
   // },
+  testToken: async (request, h) => {
+    try {
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      return h.response(decoded).code(200);
+    } catch (err) {
+      console.error(err);
+      if (err.name === "TokenExpiredError") {
+        return h.response({ message: "Token expired" }).code(401);
+      } else if (err.name === "JsonWebTokenError") {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+      return h.response({ error: "Test token failed" }).code(500);
+    }
+  },
 };
 
 async function getAccessToken(authorizationCode) {
