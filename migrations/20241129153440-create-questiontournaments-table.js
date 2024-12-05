@@ -5,6 +5,12 @@ module.exports = {
     await queryInterface.createTable(
       "QuestionTournaments",
       {
+        id: {
+          type: Sequelize.INTEGER,
+          allowNull: false,
+          autoIncrement: true,
+          primaryKey: true,
+        },
         questions_id: {
           type: Sequelize.INTEGER,
           allowNull: false,
@@ -14,18 +20,16 @@ module.exports = {
           },
           onUpdate: "CASCADE",
           onDelete: "CASCADE",
-          primaryKey: true,
         },
         tournament_id: {
           type: Sequelize.INTEGER,
           allowNull: false,
           references: {
-            model: "Tournaments",
+            model: "Tournament",
             key: "id",
           },
           onUpdate: "CASCADE",
           onDelete: "CASCADE",
-          primaryKey: true,
         },
         createdAt: {
           type: Sequelize.DATE,
