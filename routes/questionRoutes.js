@@ -20,11 +20,11 @@ const questionRoute = [
       },
       validate: {
         payload: Joi.object({
-          categories_id: Joi.number().integer().required(),
+          categories_id: Joi.string().required(),
           title: Joi.string().trim().min(1).required(),
           Description: Joi.string().trim().min(1).required(),
           Answer: Joi.string().trim().min(1).required(),
-          point: Joi.number().integer().required(),
+          point: Joi.string().required(),
 
           difficultys_id: Joi.string()
             .valid("Easy", "Medium", "Hard")
@@ -150,11 +150,12 @@ const questionRoute = [
       },
       validate: {
         payload: Joi.object({
-          categories_id: Joi.number().integer(),
+          categories_id: Joi.string(),
           title: Joi.string().trim().min(1),
           Description: Joi.string().trim().min(1),
           Answer: Joi.string().trim().min(1),
-          point: Joi.number().integer(),
+          point: Joi.string(),
+
           difficultys_id: Joi.string().valid("Easy", "Medium", "Hard"),
           file: Joi.object({
             filename: Joi.string()
@@ -166,8 +167,8 @@ const questionRoute = [
                 .required(),
             }).unknown(true),
           }),
-          Practice: Joi.boolean(),
-          Tournament: Joi.array().items(Joi.string()),
+          Practice: Joi.string(),
+          Tournament: Joi.string(),
         }),
       },
     },

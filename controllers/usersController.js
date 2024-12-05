@@ -4,6 +4,7 @@ const db = require("../models");
 const sequelize = db.sequelize;
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
+const { Op } = require("sequelize");
 const User = db.User;
 const Point = db.Point;
 

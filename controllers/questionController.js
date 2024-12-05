@@ -34,6 +34,15 @@ const questionController = {
       } = request.payload;
 
       const ArrayTournament = JSON.parse(Tournament);
+      const parsedCategoriesId = parseInt(categories_id, 10);
+      if (isNaN(parsedCategoriesId)) {
+        return h.response({ message: "Invalid categories_id" }).code(400);
+      }
+
+      const parsedPoint = parseInt(point, 10);
+      if (isNaN(parsedPoint) || parsedPoint <= 0) {
+        return h.response({ message: "Invalid point" }).code(400);
+      }
 
       const token = request.state["cmu-oauth-token"];
       if (!token) {
@@ -64,7 +73,7 @@ const questionController = {
       }
 
       const category = await Category.findOne({
-        where: { id: categories_id },
+        where: { id: parsedCategoriesId },
         attributes: ["id"],
       });
 
@@ -120,7 +129,7 @@ const questionController = {
           title,
           Description,
           Answer,
-          point,
+          point: parsedPoint,
           difficultys_id,
           file_path,
           Practice: isPractice,
