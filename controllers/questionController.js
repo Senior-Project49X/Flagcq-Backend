@@ -9,13 +9,12 @@ const User = db.User;
 const Submited = db.Submited;
 const Point = db.Point;
 const Category = db.Category;
+const sequelize = db.sequelize;
 const { Op } = require("sequelize");
 const Tournaments = db.Tournament;
 const QuestionTournament = db.QuestionTournament;
 const TournamentSubmited = db.TournamentSubmited;
 const TournamentPoints = db.TournamentPoints;
-const Team = db.Team;
-const Users_Team = db.Users_Team;
 const TeamScores = db.TeamScores;
 
 const questionController = {
@@ -33,6 +32,8 @@ const questionController = {
         Practice,
         Tournament, // array of tournament
       } = request.payload;
+
+      const ArrayTournament = JSON.parse(Tournament);
 
       const token = request.state["cmu-oauth-token"];
       if (!token) {
@@ -90,16 +91,21 @@ const questionController = {
         }
       }
 
-      let isPractice = Practice;
+      if (Practice !== "true" && Practice !== "false") {
+        return h.response({ message: "Invalid value for Practice" }).code(400);
+      }
+
+      let isPractice = Practice === "true";
+
       let validTournament = [];
-      if (Tournament && Tournament.length > 0) {
+      if (ArrayTournament && ArrayTournament.length > 0) {
         validTournament = await Tournaments.findAll({
-          where: { name: { [Op.in]: Tournament } },
+          where: { name: { [Op.in]: ArrayTournament } },
           attributes: ["id"],
           transaction,
         });
 
-        if (validTournament.length !== Tournament.length) {
+        if (validTournament.length !== ArrayTournament.length) {
           return h
             .response({ message: "Some tournaments are invalid" })
             .code(400);
