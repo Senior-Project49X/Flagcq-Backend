@@ -43,6 +43,11 @@ module.exports = {
         type: Sequelize.STRING(100),
         allowNull: false,
       },
+      Practice: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
       createdAt: {
         allowNull: false,
         type: Sequelize.DATE,

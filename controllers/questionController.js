@@ -9,12 +9,18 @@ const User = db.User;
 const Submited = db.Submited;
 const Point = db.Point;
 const Category = db.Category;
-const Mode = db.Mode;
 const { Op } = require("sequelize");
-const QuestionMode = db.QuestionMode;
+const Tournaments = db.Tournament;
+const QuestionTournament = db.QuestionTournament;
+const TournamentSubmited = db.TournamentSubmited;
+const TournamentPoints = db.TournamentPoints;
+const Team = db.Team;
+const Users_Team = db.Users_Team;
+const TeamScores = db.TeamScores;
 
 const questionController = {
-  creatQuestion: async (request, h) => {
+  createQuestion: async (request, h) => {
+    const transaction = await sequelize.transaction();
     try {
       const {
         categories_id,
@@ -24,41 +30,20 @@ const questionController = {
         point,
         difficultys_id,
         file,
-        Modes, //array of modes
+        Practice,
+        Tournament, // array of tournament
       } = request.payload;
-
-      const parsedPoint = Number(point);
-      if (isNaN(parsedPoint)) {
-        return h.response({ message: "Valid Point is required" }).code(400);
-      }
-
-      const validDifficulties = ["Easy", "Medium", "Hard"];
-      if (!validDifficulties.includes(difficultys_id)) {
-        return h
-          .response({ message: "Invalid difficulty parameter" })
-          .code(400);
-      }
-
-      if (!title || title.trim() === "") {
-        return h.response({ error: "Title is required" }).code(400);
-      }
-
-      if (!Description || Description.trim() === "") {
-        return h.response({ error: "Description is required" }).code(400);
-      }
-
-      if (!Answer || Answer.trim() === "") {
-        return h.response({ error: "Answer is required" }).code(400);
-      }
 
       const token = request.state["cmu-oauth-token"];
       if (!token) {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
       }
 
       const existingTitle = await Question.findOne({
@@ -77,19 +62,12 @@ const questionController = {
         return h.response({ message: "File already exists" }).code(409);
       }
 
-      const parsedCategoriesId = parseInt(categories_id, 10);
-      if (isNaN(parsedCategoriesId)) {
-        return h.response({ message: "Invalid category ID" }).code(400);
-      }
-
-      const catagory = await Category.findOne({
-        where: {
-          id: parsedCategoriesId,
-        },
+      const category = await Category.findOne({
+        where: { id: categories_id },
         attributes: ["id"],
       });
 
-      if (!catagory) {
+      if (!category) {
         return h.response({ message: "Category not found" }).code(404);
       }
 
@@ -101,7 +79,6 @@ const questionController = {
 
         try {
           await fs.promises.mkdir(uploadDirectory, { recursive: true });
-
           await fs.promises.writeFile(
             filePath,
             await fs.promises.readFile(file.path)
@@ -113,75 +90,93 @@ const questionController = {
         }
       }
 
-      const question = await Question.create({
-        categories_id: catagory.id,
-        title,
-        Description,
-        Answer,
-        point: parsedPoint,
-        difficultys_id,
-        file_path,
-        createdBy: `${decoded.first_name} ${decoded.last_name}`,
-      });
-
-      let modeId = [];
-      if (Modes.includes("None")) {
-        const noneMode = await Mode.findOne({ where: { name: "None" } });
-        if (!noneMode) {
-          return h.response({ message: "Mode 'None' not found" }).code(404);
-        }
-        modeId = [noneMode.id];
-      } else {
-        const validModes = await Mode.findAll({
-          where: {
-            name: { [Op.in]: Modes },
-          },
+      let isPractice = Practice;
+      let validTournament = [];
+      if (Tournament && Tournament.length > 0) {
+        validTournament = await Tournaments.findAll({
+          where: { name: { [Op.in]: Tournament } },
+          attributes: ["id"],
+          transaction,
         });
 
-        if (validModes.length !== Modes.length) {
-          return h.response({ message: "Some modes are invalid" }).code(400);
+        if (validTournament.length !== Tournament.length) {
+          return h
+            .response({ message: "Some tournaments are invalid" })
+            .code(400);
         }
 
-        modeId = validModes.map((mode) => mode.id);
+        isPractice = false;
       }
 
-      const questionMode = modeId.map((mode) => ({
-        question_id: question.id,
-        mode_id: mode,
-      }));
+      const question = await Question.create(
+        {
+          categories_id: category.id,
+          title,
+          Description,
+          Answer,
+          point,
+          difficultys_id,
+          file_path,
+          Practice: isPractice,
+          createdBy: `${decoded.first_name} ${decoded.last_name}`,
+        },
+        { transaction }
+      );
 
-      await QuestionMode.bulkCreate(questionMode);
+      if (validTournament.length > 0) {
+        const newQuestionTournament = validTournament.map((tournament) => ({
+          questions_id: question.id,
+          tournament_id: tournament.id,
+        }));
+
+        await QuestionTournament.bulkCreate(newQuestionTournament, {
+          transaction,
+        });
+      }
+
+      await transaction.commit();
 
       return h.response(question).code(201);
     } catch (error) {
+      await transaction.rollback();
       console.error(error);
       return h.response({ message: error.message }).code(500);
     }
   },
   getQuestionById: async (request, h) => {
     try {
-      const questionId = parseInt(request.params.id, 10);
-      if (isNaN(questionId)) {
-        return h.response({ message: "Invalid question ID" }).code(400);
-      }
+      const questionId = request.query.params;
 
       const token = request.state["cmu-oauth-token"];
       if (!token) {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
       }
 
       const user = await User.findOne({
-        where: { student_id: decoded.student_id },
+        where: {
+          [Op.or]: [
+            { student_id: decoded.student_id },
+            { itaccount: decoded.email },
+          ],
+        },
       });
 
       const question = await Question.findByPk(questionId, {
         attributes: {
-          exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
+          exclude: [
+            "Answer",
+            "createdAt",
+            "createdBy",
+            "updatedAt",
+            "Practice",
+          ],
         },
         include: [
           {
@@ -217,9 +212,13 @@ const questionController = {
       return h.response({ message: error.message }).code(500);
     }
   },
-  getQuestion: async (request, h) => {
+  getQuestionPractice: async (request, h) => {
     try {
       const { page = 1, category, Difficulty, mode } = request.query;
+
+      if (isNaN(page) || page <= 0) {
+        return h.response({ message: "Invalid page parameter" }).code(400);
+      }
 
       const limit = 12;
       const offset = (page - 1) * limit;
@@ -252,13 +251,20 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
       }
 
       const user = await User.findOne({
-        where: { student_id: decoded.student_id },
+        where: {
+          [Op.or]: [
+            { student_id: decoded.student_id },
+            { itaccount: decoded.email },
+          ],
+        },
       });
 
       if (!user) {
@@ -266,29 +272,17 @@ const questionController = {
       }
 
       if (mode) {
-        const validMode = await Mode.findOne({
-          where: { name: mode },
-          attributes: ["id"],
-        });
-
-        if (!validMode) {
-          return h.response({ message: "Mode not found" }).code(404);
+        if (mode === "Practice") {
+          where.Practice = true;
+        } else {
+          return h.response({ message: "Invalid mode parameter" }).code(400);
         }
-
-        where.id = {
-          [Op.in]: (
-            await QuestionMode.findAll({
-              where: { mode_id: validMode.id },
-              attributes: ["question_id"],
-            })
-          ).map((item) => item.question_id),
-        };
       }
 
       const question = await Question.findAndCountAll({
         where,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
+        limit: limit,
+        offset: offset,
         order: [
           ["difficultys_id", "ASC"],
           ["id", "ASC"],
@@ -318,16 +312,126 @@ const questionController = {
         point: q.point,
         categories_name: q.Category?.name || null,
         difficultys_id: q.difficultys_id,
-        file_path: q.file_path,
         author: q.createdBy,
         solved: solvedIds.includes(q.id),
       }));
+
+      const totalPages = Math.ceil(question.count / limit);
+      const hasNextPage = page < totalPages;
 
       return h
         .response({
           data: mappedData,
           totalItems: question.count,
           currentPage: page,
+          totalPages: totalPages,
+          hasNextPage: hasNextPage,
+        })
+        .code(200);
+    } catch (error) {
+      return h.response({ message: error.message }).code(500);
+    }
+  },
+  getQuestionTournament: async (request, h) => {
+    try {
+      const { page = 1, mode, team_id } = request.query;
+
+      if (isNaN(page) || page <= 0) {
+        return h.response({ message: "Invalid page parameter" }).code(400);
+      }
+
+      if (!mode) {
+        return h.response({ message: "Tournament ID is required" }).code(400);
+      }
+
+      const limit = 12;
+      const offset = (page - 1) * limit;
+
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: { student_id: decoded.student_id },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      const validTournament = await Tournaments.findOne({
+        where: { id: mode },
+        attributes: ["id", "name"],
+      });
+
+      if (!validTournament) {
+        return h.response({ message: "Tournament not found" }).code(404);
+      }
+
+      const questionTournament = await QuestionTournament.findAndCountAll({
+        where: { tournament_id: validTournament.id },
+        limit: limit,
+        offset: offset,
+        order: [["difficultys_id"], ["id", "ASC"]],
+        include: [
+          {
+            model: Question,
+            as: "Question",
+            include: [
+              {
+                model: Category,
+                as: "Category",
+                attributes: ["name"],
+              },
+            ],
+            attributes: {
+              exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
+            },
+          },
+        ],
+      });
+
+      if (questionTournament.count === 0) {
+        return h
+          .response({ message: "No questions found for this tournament" })
+          .code(404);
+      }
+
+      const solvedQuestionsTournament = await TournamentSubmited.findAll({
+        where: { team_id: team_id },
+        attributes: ["question_tournament_id"],
+      });
+
+      const solvedIds = solvedQuestionsTournament.map(
+        (item) => item.question_tournament_id
+      );
+
+      const mappedData = questionTournament.rows.map((qt) => {
+        const q = qt.Question;
+        return {
+          id: q.id,
+          title: q.title,
+          point: q.point,
+          categories_name: q.Category?.name || null,
+          difficultys_id: q.difficultys_id,
+          file_path: q.file_path,
+          solved: solvedIds.includes(q.id),
+        };
+      });
+
+      return h
+        .response({
+          tournament: validTournament.name,
+          data: mappedData,
+          totalItems: questionTournament.count,
+          currentPage: page,
+          totalPages: Math.ceil(questionTournament.count / limit),
         })
         .code(200);
     } catch (error) {
@@ -364,15 +468,19 @@ const questionController = {
         Answer,
         point,
         difficultys_id,
-        Modes,
         file,
+        Practice,
+        Tournament, // array of tournament
       } = request.payload;
 
-      const existingTitle = await Question.findOne({
-        where: { title, id: { [Op.ne]: questionId } },
-      });
-      if (existingTitle) {
-        return h.response({ message: "Title already exists" }).code(409);
+      if (title) {
+        const existingTitle = await Question.findOne({
+          where: { title, id: { [Op.ne]: questionId } },
+        });
+        if (existingTitle) {
+          return h.response({ message: "Title already exists" }).code(409);
+        }
+        question.title = title;
       }
 
       if (file?.filename) {
@@ -417,57 +525,62 @@ const questionController = {
         question.categories_id = category.id;
       }
 
-      if (title !== undefined) question.title = title;
-      if (Description !== undefined) question.Description = Description;
-      if (Answer !== undefined) question.Answer = Answer;
-
-      if (point !== undefined) {
-        const parsedPoint = Number(point);
-        if (isNaN(parsedPoint)) {
-          return h.response({ message: "Valid Point is required" }).code(400);
+      if (difficultys_id) {
+        const validDifficulties = ["Easy", "Medium", "Hard"];
+        if (!validDifficulties.includes(difficultys_id)) {
+          return h
+            .response({ message: "Invalid difficulty parameter" })
+            .code(400);
         }
-        question.point = parsedPoint;
+        question.difficultys_id = difficultys_id;
       }
 
-      const validDifficulties = ["Easy", "Medium", "Hard"];
-      if (difficultys_id && !validDifficulties.includes(difficultys_id)) {
-        return h
-          .response({ message: "Invalid difficulty parameter" })
-          .code(400);
+      if (Description) question.Description = Description;
+      if (Answer) question.Answer = Answer;
+      if (point) question.point = point;
+
+      if (Practice === true) {
+        await QuestionTournament.destroy({
+          where: { questions_id: question.id },
+          transaction,
+        });
+        question.Practice = true;
+      } else if (Practice === false) {
+        if (Array.isArray(Tournament) && Tournament.length > 0) {
+          await QuestionTournament.destroy({
+            where: { questions_id: question.id },
+            transaction,
+          });
+
+          const validTournament = await Tournaments.findAll({
+            where: { name: { [Op.in]: Tournament } },
+            attributes: ["id"],
+            transaction,
+          });
+
+          if (validTournament.length !== Tournament.length) {
+            return h
+              .response({ message: "Some tournaments are invalid" })
+              .code(400);
+          }
+
+          question.Practice = false;
+
+          const newQuestionTournament = validTournament.map((tournament) => ({
+            questions_id: question.id,
+            tournament_id: tournament.id,
+          }));
+
+          await QuestionTournament.bulkCreate(newQuestionTournament, {
+            transaction,
+          });
+        }
       }
-      question.difficultys_id = difficultys_id || question.difficultys_id;
 
       question.file_path = file_path;
 
-      if (Modes) {
-        let validModes;
-        if (Modes.includes("none")) {
-          validModes = await Mode.findAll({ where: { name: "none" } });
-          if (!validModes.length) {
-            return h.response({ message: "Mode 'none' not found" }).code(404);
-          }
-        } else {
-          validModes = await Mode.findAll({
-            where: { name: { [Op.in]: Modes } },
-          });
-          if (validModes.length !== Modes.length) {
-            return h.response({ message: "Some modes are invalid" }).code(400);
-          }
-        }
-
-        const newQuestionModes = validModes.map((mode) => ({
-          question_id: questionId,
-          mode_id: mode.id,
-        }));
-
-        await QuestionMode.destroy({
-          where: { question_id: questionId },
-          transaction,
-        });
-        await QuestionMode.bulkCreate(newQuestionModes, { transaction });
-      }
-
       await question.save({ transaction });
+
       await transaction.commit();
 
       return h.response(question).code(200);
@@ -527,7 +640,7 @@ const questionController = {
       return h.response({ message: error.message }).code(500);
     }
   },
-  checkAnswer: async (request, h) => {
+  checkAnswerPractice: async (request, h) => {
     try {
       const { Answer, id } = request.payload;
       const question = await Question.findByPk(id);
@@ -583,6 +696,100 @@ const questionController = {
 
         point.points += question.point;
         await point.save();
+
+        return h.response({ message: "Correct", solve: true }).code(200);
+      } else {
+        return h.response({ message: "Incorrect", solve: false }).code(200);
+      }
+    } catch (err) {
+      console.error(err);
+      return h.response({ message: "Internal Server Error" }).code(500);
+    }
+  },
+  checkAnswerTournament: async (request, h) => {
+    try {
+      const { question_id, tournament_id, Answer, team_id } = request.payload;
+
+      const question = await QuestionTournament.findOne({
+        where: { questions_id: question_id, tournament_id },
+        include: [
+          {
+            model: Question,
+            as: "Question",
+            attributes: ["Answer"],
+          },
+        ],
+      });
+
+      if (!question) {
+        return h.response({ message: "Question not found" }).code(404);
+      }
+
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [
+            { student_id: decoded.student_id },
+            { itaccount: decoded.email },
+          ],
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      const answer = "CTFCQ{" + question.Question.Answer + "}";
+      if (answer === Answer) {
+        let point = await TournamentPoints.findOne({
+          where: { users_id: user.user_id, tournament_id },
+        });
+
+        if (!point) {
+          return h.response({ message: "Point not found" }).code(404);
+        }
+
+        const existingSubmission = await TournamentSubmited.findOne({
+          where: {
+            question_tournament_id: question.id,
+            team_id,
+          },
+        });
+
+        if (existingSubmission) {
+          return h.response({ message: "Already submitted" }).code(200);
+        }
+
+        await TournamentSubmited.create({
+          users_id: user.user_id,
+          question_tournament_id: question.id,
+          tournament_id,
+          team_id,
+        });
+
+        point.points += question.Question.point;
+
+        await point.save();
+
+        let teamScore = await TeamScores.findOne({
+          where: { team_id: team_id, tournament_id },
+        });
+
+        if (!teamScore) {
+          return h.response({ message: "Team score not found" }).code(404);
+        }
+
+        teamScore.total_points += question.Question.point;
+        await teamScore.save();
 
         return h.response({ message: "Correct", solve: true }).code(200);
       } else {

@@ -79,7 +79,6 @@ const init = async () => {
   server.route(categoryRoute);
   server.route(userRoute);
   server.route(questionRoute);
-  server.route(modeRoute);
 
   await server.start();
   console.log("Server running on %s", server.info.uri);

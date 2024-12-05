@@ -19,14 +19,6 @@ module.exports = (sequelize) => {
           key: "id",
         },
       },
-      tournament_id: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: {
-          model: "Tournament",
-          key: "id",
-        },
-      },
       total_points: {
         type: DataTypes.INTEGER,
         defaultValue: 0,
@@ -37,6 +29,10 @@ module.exports = (sequelize) => {
       timestamps: true,
     }
   );
+
+  TeamScores.associate = function (models) {
+    TeamScores.belongsTo(models.Team, { foreignKey: "team_id" });
+  };
 
   return TeamScores;
 };
