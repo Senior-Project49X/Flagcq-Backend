@@ -115,8 +115,8 @@ const questionRoute = [
     options: {
       validate: {
         query: Joi.object({
-          page: Joi.number().integer().required(),
-          mode: Joi.number().integer().required(),
+          page: Joi.string.required(),
+          mode: Joi.string.required(),
         }),
       },
     },

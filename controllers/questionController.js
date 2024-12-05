@@ -231,12 +231,14 @@ const questionController = {
     try {
       const { page = 1, category, Difficulty, mode } = request.query;
 
-      if (isNaN(page) || page <= 0) {
+      const parsedPage = parseInt(page, 10);
+
+      if (isNaN(parsedPage) || parsedPage <= 0) {
         return h.response({ message: "Invalid page parameter" }).code(400);
       }
 
       const limit = 12;
-      const offset = (page - 1) * limit;
+      const offset = (parsedPage - 1) * limit;
       const validDifficulties = ["Easy", "Medium", "Hard"];
       const where = {};
 
@@ -332,13 +334,13 @@ const questionController = {
       }));
 
       const totalPages = Math.ceil(question.count / limit);
-      const hasNextPage = page < totalPages;
+      const hasNextPage = parsedPage < totalPages;
 
       return h
         .response({
           data: mappedData,
           totalItems: question.count,
-          currentPage: page,
+          currentPage: parsedPage,
           totalPages: totalPages,
           hasNextPage: hasNextPage,
         })
