@@ -3,7 +3,6 @@ const path = require("path");
 const questionController = require("../controllers/questionController");
 const Joi = require("joi");
 const { validate } = require("uuid");
-
 const questionRoute = [
   {
     method: "POST",
@@ -17,31 +16,6 @@ const questionRoute = [
           output: "file",
         },
         maxBytes: 200 * 1024 * 1024,
-      },
-      validate: {
-        payload: Joi.object({
-          categories_id: Joi.string().required(),
-          title: Joi.string().trim().min(1).required(),
-          Description: Joi.string().trim().min(1).required(),
-          Answer: Joi.string().trim().min(1).required(),
-          point: Joi.string().required(),
-
-          difficultys_id: Joi.string()
-            .valid("Easy", "Medium", "Hard")
-            .required(),
-          file: Joi.object({
-            filename: Joi.string()
-              .regex(/\.zip$/)
-              .required(),
-            headers: Joi.object({
-              "content-type": Joi.string()
-                .valid("application/zip", "application/x-zip-compressed")
-                .required(),
-            }).unknown(true),
-          }),
-          Practice: Joi.string().required(),
-          Tournament: Joi.string().required(),
-        }),
       },
     },
     handler: questionController.createQuestion,
@@ -147,29 +121,6 @@ const questionRoute = [
           output: "file",
         },
         maxBytes: 200 * 1024 * 1024,
-      },
-      validate: {
-        payload: Joi.object({
-          categories_id: Joi.string(),
-          title: Joi.string().trim().min(1),
-          Description: Joi.string().trim().min(1),
-          Answer: Joi.string().trim().min(1),
-          point: Joi.string(),
-
-          difficultys_id: Joi.string().valid("Easy", "Medium", "Hard"),
-          file: Joi.object({
-            filename: Joi.string()
-              .regex(/\.zip$/)
-              .required(),
-            headers: Joi.object({
-              "content-type": Joi.string()
-                .valid("application/zip", "application/x-zip-compressed")
-                .required(),
-            }).unknown(true),
-          }),
-          Practice: Joi.string(),
-          Tournament: Joi.string(),
-        }),
       },
     },
     handler: questionController.updateQuestion,

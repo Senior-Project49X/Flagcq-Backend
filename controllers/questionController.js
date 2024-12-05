@@ -33,7 +33,12 @@ const questionController = {
         Tournament, // array of tournament
       } = request.payload;
 
-      const ArrayTournament = JSON.parse(Tournament);
+      let ArrayTournament = [];
+      try {
+        ArrayTournament = JSON.parse(Tournament);
+      } catch (error) {
+        return h.response({ message: "Invalid Tournament format" }).code(400);
+      }
       const parsedCategoriesId = parseInt(categories_id, 10);
       if (isNaN(parsedCategoriesId)) {
         return h.response({ message: "Invalid categories_id" }).code(400);
@@ -42,6 +47,18 @@ const questionController = {
       const parsedPoint = parseInt(point, 10);
       if (isNaN(parsedPoint) || parsedPoint <= 0) {
         return h.response({ message: "Invalid point" }).code(400);
+      }
+
+      const validDifficulties = ["Easy", "Medium", "Hard"];
+
+      if (!title || !Description || !Answer || !difficultys_id) {
+        return h.response({ message: "Missing required fields" }).code(400);
+      }
+
+      if (!validDifficulties.includes(difficultys_id)) {
+        return h
+          .response({ message: "Invalid difficulty parameter" })
+          .code(400);
       }
 
       const token = request.state["cmu-oauth-token"];
@@ -83,6 +100,14 @@ const questionController = {
 
       let file_path = null;
       if (file && file.filename) {
+        const allowedFileTypes = [
+          "application/x-compressed",
+          "application/x-zip-compressed",
+        ];
+        if (!allowedFileTypes.includes(file.headers["content-type"])) {
+          return h.response({ message: "Invalid file type" }).code(400);
+        }
+
         const fileName = `${file.filename}`;
         const uploadDirectory = path.join(__dirname, "..", "uploads");
         const filePath = path.join(uploadDirectory, fileName);
@@ -535,8 +560,9 @@ const questionController = {
       }
 
       if (categories_id) {
+        const parsedCategoriesId = parseInt(categories_id, 10);
         const category = await Category.findOne({
-          where: { name: categories_id },
+          where: { id: parsedCategoriesId },
           attributes: ["id"],
         });
         if (!category) {
@@ -557,7 +583,13 @@ const questionController = {
 
       if (Description) question.Description = Description;
       if (Answer) question.Answer = Answer;
-      if (point) question.point = point;
+      if (point) {
+        const parsedPoint = parseInt(point, 10);
+        if (isNaN(parsedPoint) || parsedPoint <= 0) {
+          return h.response({ message: "Invalid point" }).code(400);
+        }
+        question.point = parsedPoint;
+      }
 
       if (Practice === true) {
         await QuestionTournament.destroy({
