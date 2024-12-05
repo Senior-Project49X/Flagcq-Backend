@@ -3,12 +3,10 @@
 const Hapi = require("@hapi/hapi");
 const db = require("./models");
 const sequelize = db.sequelize;
-const Hello = require("./routes/hello");
 const categoryRoute = require("./routes/catagoryRoutes");
 const userRoute = require("./routes/userRoute");
 const questionRoute = require("./routes/questionRoutes");
 const Inert = require("@hapi/inert");
-const modeRoute = require("./routes/modesRoutes");
 
 const init = async () => {
   const server = Hapi.server({
