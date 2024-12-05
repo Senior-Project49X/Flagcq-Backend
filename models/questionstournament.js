@@ -19,7 +19,7 @@ module.exports = (sequelize) => {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: "Tournaments",
+          model: "Tournament",
           key: "id",
         },
         unique: "question_tournament_unique",

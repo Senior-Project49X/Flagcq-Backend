@@ -44,7 +44,7 @@ const questionRoute = [
         }),
       },
     },
-    handler: questionController.creatQuestion,
+    handler: questionController.createQuestion,
   },
   {
     method: "GET",
@@ -100,7 +100,7 @@ const questionRoute = [
   {
     method: "GET",
     path: "/api/question/download/{id}",
-    option: {
+    options: {
       validate: {
         params: Joi.object({
           id: Joi.number().integer().required(),
@@ -112,7 +112,7 @@ const questionRoute = [
   {
     method: "GET",
     path: "/api/questions/practice",
-    option: {
+    options: {
       validate: {
         query: Joi.object({
           page: Joi.number().integer().required(),
@@ -125,7 +125,7 @@ const questionRoute = [
   {
     method: "GET",
     path: "/api/questions/tournament",
-    option: {
+    options: {
       validate: {
         query: Joi.object({
           page: Joi.number().integer().required(),
