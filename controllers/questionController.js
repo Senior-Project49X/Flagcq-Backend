@@ -160,7 +160,10 @@ const questionController = {
   },
   getQuestionById: async (request, h) => {
     try {
-      const questionId = request.query.params;
+      const questionId = parseInt(request.params.id, 10);
+      if (isNaN(questionId)) {
+        return h.response({ message: "Invalid question ID" }).code(400);
+      }
 
       const token = request.state["cmu-oauth-token"];
       if (!token) {

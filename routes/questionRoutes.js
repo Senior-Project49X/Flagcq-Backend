@@ -52,7 +52,7 @@ const questionRoute = [
     options: {
       validate: {
         params: Joi.object({
-          id: Joi.number().integer().required(),
+          id: Joi.string().required(),
         }),
       },
     },
@@ -64,7 +64,7 @@ const questionRoute = [
     options: {
       validate: {
         params: Joi.object({
-          id: Joi.number().integer().required(),
+          id: Joi.string().required(),
         }),
       },
     },
