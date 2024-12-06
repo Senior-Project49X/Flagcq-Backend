@@ -6,7 +6,9 @@ const Category = db.Category;
 const categoryController = {
   getAllCategories: async (request, h) => {
     try {
-      const categories = await Category.findAll();
+      const categories = await Category.findAll({
+        attributes: ["id", "name"],
+      });
       return h.response(categories).code(200);
     } catch (error) {
       console.error(error);

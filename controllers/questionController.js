@@ -591,14 +591,22 @@ const questionController = {
         question.point = parsedPoint;
       }
 
-      if (Practice === true) {
+      if (Practice !== "true" && Practice !== "false") {
+        return h.response({ message: "Invalid value for Practice" }).code(400);
+      }
+
+      let isPractice = Practice === "true";
+
+      if (isPractice === true) {
         await QuestionTournament.destroy({
           where: { questions_id: question.id },
           transaction,
         });
         question.Practice = true;
-      } else if (Practice === false) {
-        if (Array.isArray(Tournament) && Tournament.length > 0) {
+      } else if (isPractice === false) {
+        const ArrayTournament = JSON.parse(Tournament);
+
+        if (ArrayTournament && ArrayTournament.length > 0) {
           await QuestionTournament.destroy({
             where: { questions_id: question.id },
             transaction,
