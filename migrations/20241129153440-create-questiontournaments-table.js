@@ -3,20 +3,15 @@
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     await queryInterface.createTable(
-      "Submited",
+      "QuestionTournaments",
       {
-        users_id: {
-          type: Sequelize.UUID,
+        id: {
+          type: Sequelize.INTEGER,
           allowNull: false,
-          references: {
-            model: "Users",
-            key: "user_id",
-          },
-          onUpdate: "CASCADE",
-          onDelete: "CASCADE",
+          autoIncrement: true,
           primaryKey: true,
         },
-        question_id: {
+        questions_id: {
           type: Sequelize.INTEGER,
           allowNull: false,
           references: {
@@ -25,7 +20,16 @@ module.exports = {
           },
           onUpdate: "CASCADE",
           onDelete: "CASCADE",
-          primaryKey: true,
+        },
+        tournament_id: {
+          type: Sequelize.INTEGER,
+          allowNull: false,
+          references: {
+            model: "Tournament",
+            key: "id",
+          },
+          onUpdate: "CASCADE",
+          onDelete: "CASCADE",
         },
         createdAt: {
           type: Sequelize.DATE,
@@ -38,8 +42,8 @@ module.exports = {
       },
       {
         uniqueKeys: {
-          unique_users_question: {
-            fields: ["users_id", "question_id"],
+          unique_questions_tournament: {
+            fields: ["questions_id", "tournament_id"],
           },
         },
       }
@@ -47,6 +51,6 @@ module.exports = {
   },
 
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.dropTable("Submited");
+    await queryInterface.dropTable("QuestionTournaments");
   },
 };

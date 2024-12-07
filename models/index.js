@@ -26,6 +26,10 @@ if (config.use_env_variable) {
 const Category = require("./categories")(sequelize, Sequelize.DataTypes);
 const Point = require("./points")(sequelize, Sequelize.DataTypes);
 const Question = require("./questions")(sequelize, Sequelize.DataTypes);
+const QuestionTournament = require("./questionstournament")(
+  sequelize,
+  Sequelize.DataTypes
+);
 const User = require("./users")(sequelize, Sequelize.DataTypes);
 const Submited = require("./submited")(sequelize, Sequelize.DataTypes);
 const Team = require("./teams")(sequelize, Sequelize.DataTypes);
@@ -36,10 +40,15 @@ const TournamentPoints = require("./tournamentpoints")(
   sequelize,
   Sequelize.DataTypes
 );
+const TournamentSubmited = require("./tournamentsubmited")(
+  sequelize,
+  Sequelize.DataTypes
+);
 
 db.Category = Category;
 db.Point = Point;
 db.Question = Question;
+db.QuestionTournament = QuestionTournament;
 db.User = User;
 db.Submited = Submited;
 db.Team = Team;
@@ -47,6 +56,7 @@ db.Users_Team = Users_Team;
 db.TeamScores = TeamScores;
 db.Tournament = Tournament;
 db.TournamentPoints = TournamentPoints;
+db.TournamentSubmited = TournamentSubmited;
 
 fs.readdirSync(__dirname)
   .filter((file) => {

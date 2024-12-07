@@ -33,9 +33,15 @@ module.exports = {
       onDelete: "CASCADE",
       onUpdate: "CASCADE",
     });
+
+    await queryInterface.addIndex("Points", ["users_id"], {
+      unique: true,
+      name: "Points_users_id",
+    });
   },
 
   down: async (queryInterface, Sequelize) => {
+    await queryInterface.removeIndex("Points", "Points_users_id");
     await queryInterface.dropTable("Points");
   },
 };

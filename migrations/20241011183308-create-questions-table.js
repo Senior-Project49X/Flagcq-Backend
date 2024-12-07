@@ -39,13 +39,14 @@ module.exports = {
         allowNull: true,
         unique: true,
       },
-      type: {
-        type: Sequelize.ENUM("Practice", "Tournament"),
-        allowNull: false,
-      },
       createdBy: {
         type: Sequelize.STRING(100),
         allowNull: false,
+      },
+      Practice: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
       },
       createdAt: {
         allowNull: false,
@@ -68,9 +69,17 @@ module.exports = {
       onDelete: "CASCADE",
       onUpdate: "CASCADE",
     });
+
+    await queryInterface.addIndex("Questions", ["categories_id"], {
+      name: "Questions_categories_id_index",
+    });
   },
 
   down: async (queryInterface, Sequelize) => {
+    await queryInterface.removeIndex(
+      "Questions",
+      "Questions_categories_id_index"
+    );
     await queryInterface.dropTable("Questions");
   },
 };

@@ -77,7 +77,6 @@ const init = async () => {
 
   await sequelize.sync({ alter: true });
 
-  Hello(server);
   server.route(categoryRoute);
   server.route(userRoute);
   server.route(questionRoute);

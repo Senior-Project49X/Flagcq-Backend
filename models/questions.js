@@ -1,6 +1,5 @@
 "use strict";
 
-const { create } = require("domain");
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
@@ -41,9 +40,10 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(500),
         unique: true,
       },
-      type: {
-        type: DataTypes.ENUM("Practice", "Tournament"),
+      Practice: {
+        type: DataTypes.BOOLEAN,
         allowNull: false,
+        defaultValue: false,
       },
       createdBy: {
         type: DataTypes.STRING(100),
