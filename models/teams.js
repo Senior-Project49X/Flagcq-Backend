@@ -24,6 +24,11 @@ module.exports = (sequelize) => {
           key: "id",
         },
       },
+      invite_code: {
+        type: DataTypes.STRING(10), // Store invite codes
+        allowNull: false,
+        unique: true,
+      },
     },
     {
       tableName: "Teams",

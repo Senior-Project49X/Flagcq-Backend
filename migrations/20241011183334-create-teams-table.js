@@ -17,6 +17,11 @@ module.exports = {
         type: Sequelize.INTEGER,
         allowNull: false,
       },
+      invite_code: {
+        type: Sequelize.STRING(8), // Length of 8 characters for the invite code
+        allowNull: false,
+        unique: true, // Ensure invite codes are unique
+      },
       createdAt: {
         type: Sequelize.DATE,
         allowNull: false,
@@ -27,10 +32,12 @@ module.exports = {
       },
     });
 
+    // Add a unique index for name and tournament_id to ensure no duplicate team names within the same tournament
     await queryInterface.addIndex("Teams", ["name", "tournament_id"], {
       unique: true,
     });
 
+    // Add a foreign key constraint for tournament_id referencing the Tournament table
     await queryInterface.addConstraint("Teams", {
       fields: ["tournament_id"],
       type: "foreign key",
@@ -45,6 +52,7 @@ module.exports = {
   },
 
   down: async (queryInterface, Sequelize) => {
+    // Drop the Teams table and its constraints
     await queryInterface.dropTable("Teams");
   },
 };

@@ -30,5 +30,12 @@ module.exports = (sequelize) => {
     }
   );
 
+  TournamentPoints.associate = function (models) {
+    TournamentPoints.belongsTo(models.User, {
+      foreignKey: "users_id",
+      as: "user", // Alias for easier eager loading
+    });
+  };
+
   return TournamentPoints;
 };
