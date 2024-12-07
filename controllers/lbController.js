@@ -42,7 +42,7 @@ const lbController = {
     try {
       const leaderboard = await TournamentPoints.findAll({
         where: { tournament_id }, // Filter by tournament_id
-        attributes: ["users_id", "points"],
+        attributes: ["points"],
         order: [
           ["points", "DESC"],
           ["updatedAt", "ASC"],
