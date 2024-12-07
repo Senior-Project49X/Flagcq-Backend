@@ -4,7 +4,7 @@ const Hapi = require("@hapi/hapi");
 const db = require("./models");
 const sequelize = db.sequelize;
 const Hello = require("./routes/hello");
-const categoryRoute = require("./routes/catagoryRoutes");
+const categoryRoute = require("./routes/categoryRoutes");
 const userRoute = require("./routes/userRoute");
 const questionRoute = require("./routes/questionRoutes");
 const teamRoute = require("./routes/teamRoutes"); // Import your team routes
@@ -82,7 +82,7 @@ const init = async () => {
   server.route(userRoute);
   server.route(questionRoute);
   server.route(teamRoute);  // Add the team routes
-  server.route(lbRoute);
+  server.route(lbRoute); // Add Leaderboard routes
 
   await server.start();
   console.log("Server running on %s", server.info.uri);
