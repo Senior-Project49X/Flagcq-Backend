@@ -122,6 +122,16 @@ const usersController = {
         return h.response({ message: "Points not found" }).code(404);
       }
 
+      const allPoint = await Point.findAll({
+        attributes: ["users_id", "points"],
+        order: [
+          ["points", "DESC"],
+          ["updatedAt", "ASC"],
+        ],
+      });
+
+      const rank = allPoint.findIndex((p) => p.users_id === point.users_id) + 1;
+
       return h
         .response({
           first_name: decoded.first_name,
@@ -130,6 +140,7 @@ const usersController = {
           faculty: decoded.faculty,
           student_id: decoded.student_id,
           points: point.points,
+          rank: rank,
         })
         .code(200);
     } catch (err) {
