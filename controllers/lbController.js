@@ -50,6 +50,7 @@ const lbController = {
         include: [
           {
             model: User,
+            as: "user", // Match alias defined in TournamentPoints model
             attributes: ["first_name", "last_name"],
           },
         ],
@@ -67,7 +68,7 @@ const lbController = {
       return h.response(rankedLeaderboard).code(200);
     } catch (error) {
       console.error("Error fetching tournament leaderboard:", error);
-      return h.response({ message: "Failed to fetch leaderboard" }).code(500);
+      return h.response({ message: "Failed to fetch tournament board" }).code(500);
     }
   },
 };
