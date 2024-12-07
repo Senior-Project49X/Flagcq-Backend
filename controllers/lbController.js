@@ -10,7 +10,7 @@ const lbController = {
   getPracticeLeaderboard: async (request, h) => {
     try {
       const leaderboard = await Point.findAll({
-        attributes: ["users_id", "points"],
+        attributes: ["points"],
         order: [
           ["points", "DESC"],
           ["updatedAt", "ASC"],
