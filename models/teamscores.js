@@ -10,12 +10,21 @@ module.exports = (sequelize) => {
         type: DataTypes.INTEGER,
         primaryKey: true,
         allowNull: false,
+        autoIncrement: true, // Automatically increment ID
       },
       team_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
           model: "Teams",
+          key: "id",
+        },
+      },
+      tournament_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+          model: "Tournament",
           key: "id",
         },
       },
@@ -32,6 +41,7 @@ module.exports = (sequelize) => {
 
   TeamScores.associate = function (models) {
     TeamScores.belongsTo(models.Team, { foreignKey: "team_id" });
+    TeamScores.belongsTo(models.Tournament, { foreignKey: "tournament_id" });
   };
 
   return TeamScores;

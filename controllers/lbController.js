@@ -39,19 +39,16 @@ const lbController = {
   getTournamentLeaderboard: async (request, h) => {
     const { tournament_id } = request.params; // Get tournament_id from the URL
 
-    try {
-      const leaderboard = await TournamentPoints.findAll({
+  try {
+      // Fetch the leaderboard using the TeamScores table
+      const leaderboard = await db.TeamScores.findAll({
         where: { tournament_id }, // Filter by tournament_id
-        attributes: ["points"],
-        order: [
-          ["points", "DESC"],
-          ["updatedAt", "ASC"],
-        ],
+        attributes: ["team_id", "total_points"],
+        order: [["total_points", "DESC"]],
         include: [
           {
-            model: User,
-            as: "user", // Match alias defined in TournamentPoints model
-            attributes: ["first_name", "last_name"],
+            model: db.Team, // Join with the Teams table
+            attributes: ["name"], // Fetch team names
           },
         ],
       });
@@ -60,15 +57,18 @@ const lbController = {
         return h.response({ message: "No leaderboard data found for this tournament." }).code(404);
       }
 
+      // Map the leaderboard to include rank and team name
       const rankedLeaderboard = leaderboard.map((entry, index) => ({
-        ...entry.dataValues,
+        team_id: entry.team_id,
+        team_name: entry.Team.name,
+        total_points: entry.total_points,
         rank: index + 1,
       }));
 
       return h.response(rankedLeaderboard).code(200);
     } catch (error) {
       console.error("Error fetching tournament leaderboard:", error);
-      return h.response({ message: "Failed to fetch tournament board" }).code(500);
+      return h.response({ message: "Failed to fetch tournament leaderboard" }).code(500);
     }
   },
 };
