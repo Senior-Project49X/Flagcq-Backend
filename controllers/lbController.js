@@ -4,6 +4,7 @@ const db = require("../models");
 const User = db.User;
 const Point = db.Point;
 const TournamentPoints = db.TournamentPoints; // Assuming this model exists for storing tournament-specific points
+const TeamScores = db.TeamScores; // Assuming the TeamScores model exists
 
 const lbController = {
   // Leaderboard for practice mode
@@ -69,6 +70,25 @@ const lbController = {
     } catch (error) {
       console.error("Error fetching tournament leaderboard:", error);
       return h.response({ message: "Failed to fetch tournament leaderboard" }).code(500);
+    }
+  },
+  
+  createTeamScore: async (request, h) => {
+    const { tournament_id } = request.params; // From the path
+    const { id,team_id, total_points } = request.payload; // From the body
+
+    try {
+      // Create a new entry in TeamScores
+      const teamScore = await TeamScores.create({
+        team_id,
+        tournament_id,
+        total_points,
+      });
+
+      return h.response({ message: "Team score created successfully", data: teamScore }).code(201);
+    } catch (error) {
+      console.error("Error creating team score:", error);
+      return h.response({ message: "Failed to create team score" }).code(500);
     }
   },
 };
