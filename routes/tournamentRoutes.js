@@ -1,18 +1,15 @@
 "use strict";
 
+const Joi = require("joi"); // Import Joi for payload validation
 const tournamentController = require("../controllers/tournamentController");
 
-module.exports = [
+const tournamentRoutes = [
   {
     method: "POST",
-    path: "/tournaments",
+    path: "/api/createtournament", // API endpoint for creating a tournament
     options: {
-      auth: {
-        strategy: "default", // Replace with your auth strategy name
-        scope: ["Admin"], // Ensures only admins can access this route
-      },
       validate: {
-        payload: {
+        payload: Joi.object({
           name: Joi.string().max(50).required().messages({
             "string.base": "Name must be a string.",
             "string.max": "Name cannot exceed 50 characters.",
@@ -39,15 +36,17 @@ module.exports = [
             "date.base": "Event end date must be a valid date.",
             "any.required": "Event end date is required.",
           }),
-        },
+        }),
         failAction: (request, h, err) => {
           return h.response({ message: err.message }).code(400).takeover();
         },
       },
       description: "Create a new tournament",
-      notes: "Allows admin users to create tournaments with proper dates.",
+      notes: "Allows basic creation of tournaments with proper dates.",
       tags: ["api", "tournaments"], // Useful for Swagger documentation
     },
     handler: tournamentController.createTournament,
   },
 ];
+
+module.exports = tournamentRoutes;
