@@ -35,7 +35,7 @@ module.exports = {
         updatedAt: new Date(),
       },
       {
-        name: "Crytography",
+        name: "Cryptography",
         createdAt: new Date(),
         updatedAt: new Date(),
       },
