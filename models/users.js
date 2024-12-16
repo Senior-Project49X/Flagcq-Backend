@@ -38,6 +38,10 @@ module.exports = (sequelize) => {
         type: DataTypes.ENUM("StdAcc", "MISEmpAcc"),
         allowNull: false,
       },
+      role: {
+        type: DataTypes.ENUM("User", "Admin", "TA"),
+        allowNull: false,
+      },
     },
     {
       tableName: "Users",

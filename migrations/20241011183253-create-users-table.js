@@ -40,6 +40,10 @@ module.exports = {
         type: Sequelize.ENUM("StdAcc", "MISEmpAcc"),
         allowNull: false,
       },
+      role: {
+        type: Sequelize.ENUM("User", "Admin", "TA"),
+        allowNull: false,
+      },
       createdAt: {
         allowNull: false,
         type: Sequelize.DATE,

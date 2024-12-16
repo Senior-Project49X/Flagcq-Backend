@@ -42,6 +42,7 @@ const usersController = {
           last_name: userInfo.lastname_EN,
           faculty: userInfo.organization_name_EN,
           AccType: userInfo.itaccounttype_id,
+          role: "User",
         });
       }
 

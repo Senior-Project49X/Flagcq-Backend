@@ -17,6 +17,14 @@ module.exports = {
         'Hard'
       );
     `);
+
+    await queryInterface.sequelize.query(`
+      CREATE TYPE "Role" AS ENUM (
+        'User',
+        'Admin'
+        'TA'
+      );
+    `);
   },
 
   down: async (queryInterface, Sequelize) => {
