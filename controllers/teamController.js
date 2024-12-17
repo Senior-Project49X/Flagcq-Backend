@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 const db = require("../models");
-const { Team, Users_Team, TeamScores, User } = db;
+const { Team, Users_Team, TeamScores, User, TournamentPoints } = db;
 const axios = require("axios");
 const { Op } = require("sequelize");
 
@@ -29,9 +29,7 @@ const teamController = {
       if (!token) {
         return h.response({ message: "Unauthorized: No token provided." }).code(401);
       }
-      // console.log("this is the token: " + token);
   
-      // Verify JWT
       let decoded;
       try {
         decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
@@ -39,7 +37,7 @@ const teamController = {
         return h.response({ message: "Unauthorized: Invalid token." }).code(401);
       }
   
-      // Retrieve user using decoded data
+      // Retrieve user
       const user = await User.findOne({
         where: {
           [Op.or]: [
@@ -55,7 +53,23 @@ const teamController = {
   
       const user_id = user.user_id;
   
-      // Check if a team with the same name already exists in the same tournament
+      // Check if the user is already in a team for this tournament
+      const userAlreadyInTeam = await Users_Team.findOne({
+        include: [
+          {
+            model: Team,
+            as: "team",
+            where: { tournament_id },
+          },
+        ],
+        where: { users_id: user_id },
+      });
+  
+      if (userAlreadyInTeam) {
+        return h.response({ message: "User is already in a team for this tournament." }).code(400);
+      }
+  
+      // Check if a team with the same name already exists
       const existingTeam = await Team.findOne({
         where: { name, tournament_id },
       });
@@ -64,24 +78,32 @@ const teamController = {
         return h.response({ message: "A team with this name already exists in the tournament." }).code(400);
       }
   
-      // Create the team in the database
+      // Create the team
       const newTeam = await Team.create({
         name,
         tournament_id,
         invite_code: teamController.generateInviteCode(),
       });
   
-      // Add an entry to users_team for the creator of the team
+      // Add the creator to the team in Users_Team
       await Users_Team.create({
         users_id: user_id,
         team_id: newTeam.id,
       });
   
-      // Add an entry to teamscores with initial total_points = 0
+      // Initialize the team score in TeamScores
       await TeamScores.create({
         team_id: newTeam.id,
         tournament_id,
         total_points: 0,
+      });
+  
+      // Initialize individual score for the creator in TournamentPoints
+      // No need to provide 'id' field; it will be auto-generated
+      await TournamentPoints.create({
+        users_id: user_id,
+        tournament_id,
+        points: 0, // Set points to 0
       });
   
       return h.response({
@@ -95,7 +117,7 @@ const teamController = {
         error: error.message,
       }).code(500);
     }
-  },
+  },  
   
   // Join Team function
   joinTeam: async (req, h) => {
@@ -106,8 +128,34 @@ const teamController = {
         return h.response({ message: "Invite code is required." }).code(400);
       }
 
-      // Get user_id from the token
-      const user_id = teamController.getUserIdFromToken(req);
+      // Retrieve and verify the token from the cookie
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized: No token provided." }).code(401);
+      }
+
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Unauthorized: Invalid token." }).code(401);
+      }
+
+      // Retrieve user using decoded data
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [
+            { student_id: decoded.student_id },
+            { itaccount: decoded.email },
+          ],
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+
+      const user_id = user.user_id;
 
       // Find the team by invite code
       const team = await Team.findOne({ where: { invite_code } });
@@ -116,13 +164,29 @@ const teamController = {
         return h.response({ message: "Team not found with that invite code." }).code(404);
       }
 
-      // Check if the user is already in the team
-      const existingUserTeam = await Users_Team.findOne({
-        where: { users_id: user_id, team_id: team.id },
+      // Check if the team already has 4 members
+      const teamMembersCount = await Users_Team.count({
+        where: { team_id: team.id },
       });
 
-      if (existingUserTeam) {
-        return h.response({ message: "User already joined this team." }).code(400);
+      if (teamMembersCount >= 4) {
+        return h.response({ message: "Team already has 4 members. Cannot join." }).code(400);
+      }
+
+      // Check if the user is already in the team using the alias "team"
+      const userAlreadyInTeam = await Users_Team.findOne({
+        where: { users_id: user_id, team_id: team.id },
+        include: [
+          {
+            model: Team,
+            as: "team", // Use the alias defined in Users_Team model
+            attributes: [], // Optional: Exclude Team attributes if not needed
+          },
+        ],
+      });
+
+      if (userAlreadyInTeam) {
+        return h.response({ message: "User is already in a team for this tournament." }).code(400);
       }
 
       // Add the user to the team
@@ -131,18 +195,167 @@ const teamController = {
         team_id: team.id,
       });
 
+      // Initialize the user's individual score in TournamentPoints
+      await TournamentPoints.create({
+        users_id: user_id,
+        tournament_id: team.tournament_id,
+        points: 0,
+      });
+
       return h.response({
         message: "Successfully joined the team",
         team,
       }).code(200);
-    } catch (error) {
-      console.error("Error joining team:", error.message);
+      } catch (error) {
+        console.error("Error joining team:", error.message);
+        return h.response({
+          message: "Failed to join team",
+          error: error.message,
+        }).code(500);
+      }
+    },
+    
+  // Join Team function (for testing with fake users_id)
+  joinFakeTeam: async (req, h) => {
+    try {
+      const { invite_code, users_id } = req.payload; // Using fake users_id from the request
+
+      if (!invite_code || !users_id) {
+        return h.response({ message: "Invite code and users_id are required." }).code(400);
+      }
+
+      // Find the team by invite code
+      const team = await Team.findOne({ where: { invite_code } });
+
+      if (!team) {
+        return h.response({ message: "Team not found with that invite code." }).code(404);
+      }
+      
+      // Check if the team already has 4 members
+      const teamMembersCount = await Users_Team.count({
+        where: { team_id: team.id },
+      });
+
+      if (teamMembersCount >= 4) {
+        return h.response({ message: "Team already has 4 members. Cannot join." }).code(400);
+      }
+
+      // Check if the user is already in the team using the alias "team"
+      const userAlreadyInTeam = await Users_Team.findOne({
+        where: { users_id: users_id, team_id: team.id },
+        include: [
+          {
+            model: Team,
+            as: "team", // Use the alias defined in Users_Team model
+            attributes: [], // Optional: Exclude Team attributes if not needed
+          },
+        ],
+      });
+
+      if (userAlreadyInTeam) {
+        return h.response({ message: "User is already in a team for this tournament." }).code(400);
+      }
+
+      // Add the user to the team
+      await Users_Team.create({
+        users_id,
+        team_id: team.id,
+      });
+
+      // Initialize the user's individual score in TournamentPoints
+      await TournamentPoints.create({
+        users_id,
+        tournament_id: team.tournament_id,
+        points: 0,
+      });
+
       return h.response({
-        message: "Failed to join team",
-        error: error.message,
-      }).code(500);
+        message: "Successfully joined the team",
+        team,
+      }).code(200);
+      } catch (error) {
+        console.error("Error joining team:", error.message);
+        return h.response({
+          message: "Failed to join team",
+          error: error.message,
+        }).code(500);
+      }
+    },
+
+  // Function to get the team members' scores
+  getTeamScores: async (req, h) => {
+    try {
+      const { tournament_id, team_id } = req.params; // Extract parameters from the path
+  
+      // Validate input
+      if (!team_id || !tournament_id) {
+        return h
+          .response({ message: "Team ID and Tournament ID are required." })
+          .code(400);
+      }
+  
+      // Find the team
+      const team = await Team.findOne({
+        where: { id: team_id, tournament_id },
+        attributes: ["id", "name"], // Fetch team name
+      });
+  
+      if (!team) {
+        return h
+          .response({ message: "Team not found for the given tournament." })
+          .code(404);
+      }
+  
+      // Retrieve team members with their scores
+      const teamMembersScores = await Users_Team.findAll({
+        where: { team_id: team.id },
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["user_id", "first_name", "last_name"], // Fetch user details
+            include: [
+              {
+                model: TournamentPoints,
+                as: "tournamentPoints",
+                where: { tournament_id },
+                attributes: ["points"], // Fetch user's points in the tournament
+              },
+            ],
+          },
+        ],
+      });
+  
+      // Format the response
+      const membersWithScores = teamMembersScores.map((userTeam) => ({
+        first_name: userTeam.user.first_name,
+        last_name: userTeam.user.last_name,
+        points:
+          userTeam.user.tournamentPoints?.[0]?.points || 0, // Default to 0 if no points
+      }));
+  
+      // Sort members by points (descending)
+      const sortedMembers = membersWithScores.sort((a, b) => b.points - a.points);
+  
+      // Return response
+      return h
+        .response({
+          message: "Team members' scores retrieved successfully.",
+          team_name: team.name,
+          members: sortedMembers,
+        })
+        .code(200);
+    } catch (error) {
+      console.error("Error retrieving team scores:", error.message);
+      return h
+        .response({
+          message: "Failed to retrieve team scores.",
+          error: error.message,
+        })
+        .code(500);
     }
-  },
+  },  
+
 };
 
 module.exports = teamController;

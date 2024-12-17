@@ -39,20 +39,14 @@ const lbController = {
   // Leaderboard for tournament mode
   getTournamentLeaderboard: async (request, h) => {
     const { tournament_id } = request.params; // Get tournament_id from the URL
-
+  
     try {
-      // Fetch unique team scores, grouping by team_id
-      const leaderboard = await db.TeamScores.findAll({
+      const leaderboard = await TeamScores.findAll({
         where: { tournament_id }, // Filter by tournament_id
-        attributes: [
-          "team_id",
-          [db.Sequelize.fn("MAX", db.Sequelize.col("total_points")), "total_points"], // Get max total_points for each team
-          [db.Sequelize.fn("MAX", db.Sequelize.col("TeamScores.updatedAt")), "updatedAt"], // Get latest update for each team
-        ],
-        group: ["team_id", "Team.id"], // Include Team.id in group to avoid issues with JOIN
+        attributes: ["team_id", "total_points", "updatedAt"], // Fetch necessary fields
         order: [
-          [db.Sequelize.literal("total_points"), "DESC"], // Order by total points descending
-          [db.Sequelize.literal("updatedAt"), "DESC"],    // For ties, use the most recent update
+          ["total_points", "DESC"], // Order by total points descending
+          ["updatedAt", "ASC"], // Break ties using updatedAt (earliest first)
         ],
         include: [
           {
@@ -62,11 +56,11 @@ const lbController = {
         ],
         limit: 6, // Fetch only the top 6 entries
       });
-
+  
       if (!leaderboard.length) {
         return h.response({ message: "No leaderboard data found for this tournament." }).code(404);
       }
-
+  
       // Map the leaderboard to include rank and team name
       const rankedLeaderboard = leaderboard.map((entry, index) => ({
         team_id: entry.team_id,
@@ -74,32 +68,54 @@ const lbController = {
         total_points: entry.total_points,
         rank: index + 1,
       }));
-
+  
       return h.response(rankedLeaderboard).code(200);
     } catch (error) {
       console.error("Error fetching tournament leaderboard:", error);
       return h.response({ message: "Failed to fetch tournament leaderboard" }).code(500);
     }
-  },
+  },  
   
-  createTeamScore: async (request, h) => {
+  updateTeamScore: async (request, h) => {
     const { tournament_id } = request.params; // From the path
     const { team_id, total_points } = request.payload; // From the body
-
+  
     try {
-      // Create a new entry in TeamScores
-      const teamScore = await TeamScores.create({
-        team_id,
-        tournament_id,
-        total_points,
-      });
-
-      return h.response({ message: "Team score created successfully", data: teamScore }).code(201);
+      // Update the total_points where team_id and tournament_id match
+      const [updatedRowsCount] = await TeamScores.update(
+        { total_points }, // Fields to update
+        {
+          where: {
+            team_id,
+            tournament_id,
+          },
+        }
+      );
+  
+      // Check if any rows were updated
+      if (updatedRowsCount === 0) {
+        return h.response({
+          message: "No matching record found to update. Check team_id and tournament_id.",
+        }).code(404);
+      }
+  
+      return h.response({
+        message: "Team score updated successfully",
+        updatedFields: {
+          team_id,
+          tournament_id,
+          total_points,
+        },
+      }).code(200);
     } catch (error) {
-      console.error("Error creating team score:", error);
-      return h.response({ message: "Failed to create team score" }).code(500);
+      console.error("Error updating team score:", error);
+      return h.response({
+        message: "Failed to update team score",
+        error: error.message,
+      }).code(500);
     }
   },
+  
 };
 
 module.exports = lbController;

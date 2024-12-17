@@ -48,11 +48,16 @@ module.exports = (sequelize) => {
   User.associate = function (models) {
     User.hasMany(models.Point, { foreignKey: "users_id" });
     User.hasMany(models.Submited, { foreignKey: "users_id" });
-    User.hasMany(models.TournamentPoints, { foreignKey: "users_id" });
-    User.belongsToMany(models.Team, {
-      through: models.Users_Team,
+    User.hasMany(models.TournamentPoints, {
       foreignKey: "users_id",
+      as: "tournamentPoints",
     });
+    User.belongsToMany(models.Team, {
+      through: models.Users_Team, // Link through Users_Team table
+      foreignKey: "users_id",
+      otherKey: "team_id",
+    });
+    
   };
 
   return User;

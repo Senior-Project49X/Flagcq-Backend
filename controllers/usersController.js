@@ -103,7 +103,6 @@ const usersController = {
   getUserPractice: async (request, h) => {
     try {
       const token = request.state["cmu-oauth-token"];
-      console.log(token);
       if (!token) {
         return h.response({ message: "Unauthorized 1" }).code(401);
       }

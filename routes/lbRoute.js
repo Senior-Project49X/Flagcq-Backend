@@ -16,7 +16,7 @@ const lbRoute = [
   {
     method: "POST",
     path: "/api/lb/tournament/{tournament_id}", // Use tournament_id in the path
-    handler: lbController.createTeamScore,
+    handler: lbController.updateTeamScore,
   },
 ];
 
