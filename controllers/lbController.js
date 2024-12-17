@@ -40,18 +40,27 @@ const lbController = {
   getTournamentLeaderboard: async (request, h) => {
     const { tournament_id } = request.params; // Get tournament_id from the URL
 
-  try {
-      // Fetch the leaderboard using the TeamScores table
+    try {
+      // Fetch unique team scores, grouping by team_id
       const leaderboard = await db.TeamScores.findAll({
         where: { tournament_id }, // Filter by tournament_id
-        attributes: ["team_id", "total_points"],
-        order: [["total_points", "DESC"]],
+        attributes: [
+          "team_id",
+          [db.Sequelize.fn("MAX", db.Sequelize.col("total_points")), "total_points"], // Get max total_points for each team
+          [db.Sequelize.fn("MAX", db.Sequelize.col("TeamScores.updatedAt")), "updatedAt"], // Get latest update for each team
+        ],
+        group: ["team_id", "Team.id"], // Include Team.id in group to avoid issues with JOIN
+        order: [
+          [db.Sequelize.literal("total_points"), "DESC"], // Order by total points descending
+          [db.Sequelize.literal("updatedAt"), "DESC"],    // For ties, use the most recent update
+        ],
         include: [
           {
             model: db.Team, // Join with the Teams table
-            attributes: ["name"], // Fetch team names
+            attributes: ["id", "name"], // Fetch team names
           },
         ],
+        limit: 6, // Fetch only the top 6 entries
       });
 
       if (!leaderboard.length) {
@@ -75,7 +84,7 @@ const lbController = {
   
   createTeamScore: async (request, h) => {
     const { tournament_id } = request.params; // From the path
-    const { id,team_id, total_points } = request.payload; // From the body
+    const { team_id, total_points } = request.payload; // From the body
 
     try {
       // Create a new entry in TeamScores

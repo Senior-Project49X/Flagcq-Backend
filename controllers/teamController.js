@@ -22,6 +22,18 @@ exports.createTeam = async (req, h) => {
       if (!name || !tournament_id) {
         return h.response({ message: "Name and Tournament ID are required." }).code(400);
       }
+
+      // Check if a team with the same name already exists in the same tournament
+      const existingTeam = await db.Team.findOne({
+        where: {
+          name,
+          tournament_id,
+        },
+      });
+
+      if (existingTeam) {
+        return h.response({ message: "A team with this name already exists in the tournament." }).code(400);
+      }
   
       // Create the team using the data from the request
       const team = await db.Team.create({
