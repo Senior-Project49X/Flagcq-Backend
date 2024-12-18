@@ -13,6 +13,10 @@ const teamRoutes = [
     handler: teamController.createTeam,
   },{
     method: "POST",
+    path: "/teams/createmock",
+    handler: teamController.createTeamMock,
+  },{
+    method: "POST",
     path: "/teams/fakejoin",
     handler: teamController.joinFakeTeam,
   },{

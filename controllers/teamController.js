@@ -118,6 +118,90 @@ const teamController = {
       }).code(500);
     }
   },  
+
+  //
+  createTeamMock: async (req, h) => {
+    try {
+      const { name, tournament_id, user_id } = req.payload;
+  
+      if (!name || !tournament_id || !user_id) {
+        return h.response({ message: "Name, Tournament ID, and User ID are required." }).code(400);
+      }
+  
+      // Retrieve the user directly by user_id (for testing purposes, bypass token verification)
+      const user = await User.findOne({
+        where: { user_id }
+      });
+  
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+  
+      // Check if the user is already in a team for this tournament
+      const userAlreadyInTeam = await Users_Team.findOne({
+        include: [
+          {
+            model: Team,
+            as: "team",
+            where: { tournament_id },
+          },
+        ],
+        where: { users_id: user_id },
+      });
+  
+      if (userAlreadyInTeam) {
+        return h.response({ message: "User is already in a team for this tournament." }).code(400);
+      }
+  
+      // Check if a team with the same name already exists
+      const existingTeam = await Team.findOne({
+        where: { name, tournament_id },
+      });
+  
+      if (existingTeam) {
+        return h.response({ message: "A team with this name already exists in the tournament." }).code(400);
+      }
+  
+      // Create the team
+      const newTeam = await Team.create({
+        name,
+        tournament_id,
+        invite_code: teamController.generateInviteCode(),
+      });
+  
+      // Add the creator to the team in Users_Team
+      await Users_Team.create({
+        users_id: user_id,
+        team_id: newTeam.id,
+      });
+  
+      // Initialize the team score in TeamScores
+      await TeamScores.create({
+        team_id: newTeam.id,
+        tournament_id,
+        total_points: 0,
+      });
+  
+      // Initialize individual score for the creator in TournamentPoints
+      await TournamentPoints.create({
+        users_id: user_id,
+        tournament_id,
+        points: 0, // Set points to 0
+      });
+  
+      return h.response({
+        message: "Team created successfully",
+        team: newTeam,
+      }).code(201);
+    } catch (error) {
+      console.error("Error creating team:", error.message);
+      return h.response({
+        message: "Failed to create team",
+        error: error.message,
+      }).code(500);
+    }
+  },
+  
   
   // Join Team function
   joinTeam: async (req, h) => {
@@ -308,23 +392,36 @@ const teamController = {
         return h.response({ message: "Team score not found for the given tournament." }).code(404);
       }
   
-      // Step 2: Retrieve all scores for the tournament and sort by total_points (descending)
-      const allTeamScores = await TeamScores.findAll({
-        where: { tournament_id },
-        attributes: ["team_id", "total_points"],
-        order: [["total_points", "DESC"]], // Sort total_points in descending order
-      });
-  
-      // Step 3: Find the rank of the specific team
-      let rank = 1; // Start from 1
-      for (const [index, team] of allTeamScores.entries()) {
-        if (team.team_id === team_id) {
-          rank = index + 1; // Rank is index + 1
-          break;
+      // Step 2: Helper function to calculate rank
+      const getTeamRank = async (tournament_id, team_id) => {
+        try {
+          // Retrieve all team scores and sort by total_points (descending)
+          const allTeamScores = await TeamScores.findAll({
+            where: { tournament_id },
+            attributes: ["team_id", "total_points"],
+            order: [
+              ["total_points", "DESC"], // Sort by total points descending
+              ["updatedAt", "ASC"], // If total_points are equal, sort by updatedAt ascending
+            ],
+          });
+
+          // Find the rank of the specific team
+          for (let index = 0; index < allTeamScores.length; index++) {
+            const teamScore = allTeamScores[index];
+            if (teamScore.team_id === parseInt(team_id)) { // Ensure team_id comparison works
+              return index + 1; // Rank is index + 1
+            }
+          }
+
+          return null; // Return null if the team is not found
+        } catch (error) {
+          console.error("Error calculating team rank:", error);
+          throw error; // Propagate the error to the caller
         }
-      }
-  
-      // Step 4: Fetch team members with their points (using Users_Team and TournamentPoints)
+      };
+      const rank = await getTeamRank(tournament_id, team_id);
+      
+      // Step 3: Fetch team members with their points (using Users_Team and TournamentPoints)
       const teamMembersScores = await Users_Team.findAll({
         where: { team_id },
         include: [
@@ -344,7 +441,7 @@ const teamController = {
         ],
       });
   
-      // Step 5: Format members with scores
+      // Step 4: Format members with scores
       const membersWithScores = teamMembersScores.map((member) => ({
         first_name: member.user.first_name,
         last_name: member.user.last_name,
@@ -354,7 +451,7 @@ const teamController = {
       // Sort members by points (descending)
       const sortedMembers = membersWithScores.sort((a, b) => b.points - a.points);
   
-      // Step 6: Return result
+      // Step 5 Return result
       return h.response({
         message: "Team scores and rank retrieved successfully.",
         team_name: teamScore.Team.name, // Include team name
