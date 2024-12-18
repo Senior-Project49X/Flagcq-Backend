@@ -10,18 +10,27 @@ module.exports = (sequelize) => {
         type: DataTypes.INTEGER,
         primaryKey: true,
         allowNull: false,
+        autoIncrement: true, // Add auto-increment here
       },
       users_id: {
         type: DataTypes.UUID,
         allowNull: false,
+        references: {
+          model: "Users",
+          key: "user_id",
+        },
       },
       tournament_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
+        references: {
+          model: "Tournament",
+          key: "id",
+        },
       },
       points: {
         type: DataTypes.INTEGER,
-        defaultValue: 0,
+        defaultValue: 0, // Default points set to 0
       },
     },
     {
@@ -33,7 +42,11 @@ module.exports = (sequelize) => {
   TournamentPoints.associate = function (models) {
     TournamentPoints.belongsTo(models.User, {
       foreignKey: "users_id",
-      as: "user", // Alias for easier eager loading
+      as: "user",
+    });
+    TournamentPoints.belongsTo(models.Tournament, {
+      foreignKey: "tournament_id",
+      as: "tournament",
     });
   };
 

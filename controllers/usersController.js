@@ -105,7 +105,7 @@ const usersController = {
     try {
       const token = request.state["cmu-oauth-token"];
       if (!token) {
-        return h.response({ message: "Unauthorized" }).code(401);
+        return h.response({ message: "Unauthorized 1" }).code(401);
       }
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
