@@ -292,10 +292,16 @@ const teamController = {
         return h.response({ message: "Team ID and Tournament ID are required." }).code(400);
       }
   
-      // Step 1: Get team score for the specific team
+      // Step 1: Get team score and team name
       const teamScore = await TeamScores.findOne({
         where: { team_id, tournament_id },
         attributes: ["team_id", "total_points"],
+        include: [
+          {
+            model: Team, // Use the model directly without alias
+            attributes: ["name"], // Fetch team name
+          },
+        ],
       });
   
       if (!teamScore) {
@@ -351,7 +357,7 @@ const teamController = {
       // Step 6: Return result
       return h.response({
         message: "Team scores and rank retrieved successfully.",
-        team_id,
+        team_name: teamScore.Team.name, // Include team name
         total_score: teamScore.total_points,
         rank: rank,
         members: sortedMembers,
@@ -363,7 +369,8 @@ const teamController = {
         error: error.message,
       }).code(500);
     }
-  },  
+  },
+   
       
 
 };
