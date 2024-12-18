@@ -285,76 +285,86 @@ const teamController = {
   // Function to get the team members' scores
   getTeamScores: async (req, h) => {
     try {
-      const { tournament_id, team_id } = req.params; // Extract parameters from the path
+      const { tournament_id, team_id } = req.params; // Extract parameters
   
       // Validate input
       if (!team_id || !tournament_id) {
-        return h
-          .response({ message: "Team ID and Tournament ID are required." })
-          .code(400);
+        return h.response({ message: "Team ID and Tournament ID are required." }).code(400);
       }
   
-      // Find the team
-      const team = await Team.findOne({
-        where: { id: team_id, tournament_id },
-        attributes: ["id", "name"], // Fetch team name
+      // Step 1: Get team score for the specific team
+      const teamScore = await TeamScores.findOne({
+        where: { team_id, tournament_id },
+        attributes: ["team_id", "total_points"],
       });
   
-      if (!team) {
-        return h
-          .response({ message: "Team not found for the given tournament." })
-          .code(404);
+      if (!teamScore) {
+        return h.response({ message: "Team score not found for the given tournament." }).code(404);
       }
   
-      // Retrieve team members with their scores
+      // Step 2: Retrieve all scores for the tournament and sort by total_points (descending)
+      const allTeamScores = await TeamScores.findAll({
+        where: { tournament_id },
+        attributes: ["team_id", "total_points"],
+        order: [["total_points", "DESC"]], // Sort total_points in descending order
+      });
+  
+      // Step 3: Find the rank of the specific team
+      let rank = 1; // Start from 1
+      for (const [index, team] of allTeamScores.entries()) {
+        if (team.team_id === team_id) {
+          rank = index + 1; // Rank is index + 1
+          break;
+        }
+      }
+  
+      // Step 4: Fetch team members with their points (using Users_Team and TournamentPoints)
       const teamMembersScores = await Users_Team.findAll({
-        where: { team_id: team.id },
+        where: { team_id },
         include: [
           {
             model: User,
             as: "user",
-            attributes: ["user_id", "first_name", "last_name"], // Fetch user details
+            attributes: ["first_name", "last_name"],
             include: [
               {
                 model: TournamentPoints,
                 as: "tournamentPoints",
                 where: { tournament_id },
-                attributes: ["points"], // Fetch user's points in the tournament
+                attributes: ["points"],
               },
             ],
           },
         ],
       });
   
-      // Format the response
-      const membersWithScores = teamMembersScores.map((userTeam) => ({
-        first_name: userTeam.user.first_name,
-        last_name: userTeam.user.last_name,
-        points:
-          userTeam.user.tournamentPoints?.[0]?.points || 0, // Default to 0 if no points
+      // Step 5: Format members with scores
+      const membersWithScores = teamMembersScores.map((member) => ({
+        first_name: member.user.first_name,
+        last_name: member.user.last_name,
+        points: member.user.tournamentPoints?.[0]?.points || 0,
       }));
   
       // Sort members by points (descending)
       const sortedMembers = membersWithScores.sort((a, b) => b.points - a.points);
   
-      // Return response
-      return h
-        .response({
-          message: "Team members' scores retrieved successfully.",
-          team_name: team.name,
-          members: sortedMembers,
-        })
-        .code(200);
+      // Step 6: Return result
+      return h.response({
+        message: "Team scores and rank retrieved successfully.",
+        team_id,
+        total_score: teamScore.total_points,
+        rank: rank,
+        members: sortedMembers,
+      }).code(200);
     } catch (error) {
       console.error("Error retrieving team scores:", error.message);
-      return h
-        .response({
-          message: "Failed to retrieve team scores.",
-          error: error.message,
-        })
-        .code(500);
+      return h.response({
+        message: "Failed to retrieve team scores.",
+        error: error.message,
+      }).code(500);
     }
   },  
+      
 
 };
 

@@ -57,9 +57,10 @@ module.exports = (sequelize) => {
       as: "tournamentPoints",
     });
     User.belongsToMany(models.Team, {
-      through: models.Users_Team, // Link through Users_Team table
+      through: models.Users_Team,
       foreignKey: "users_id",
       otherKey: "team_id",
+      as: "teams", // Alias for teams the user belongs to
     });
     
   };

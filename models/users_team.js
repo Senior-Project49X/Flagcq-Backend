@@ -41,14 +41,15 @@ module.exports = (sequelize) => {
   Users_Team.associate = function (models) {
     Users_Team.belongsTo(models.User, {
       foreignKey: "users_id",
-      as: "user",
+      as: "user", // Alias for user details
     });
-
+  
     Users_Team.belongsTo(models.Team, {
       foreignKey: "team_id",
-      as: "team",
+      as: "team", // Alias for the team details
     });
   };
+  
 
   return Users_Team;
 };
