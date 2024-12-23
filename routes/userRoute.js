@@ -20,7 +20,7 @@ const userRoute = [
     handler: usersController.getUserPractice,
   },
   {
-    method: "GET",
+    method: "POST",
     path: "/api/token",
     handler: usersController.testToken,
   },

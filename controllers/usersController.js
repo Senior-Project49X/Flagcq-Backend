@@ -254,9 +254,9 @@ const usersController = {
   // },
   testToken: async (request, h) => {
     try {
-      const token = request.state["cmu-oauth-token"];
+      const { token } = request.payload;
       if (!token) {
-        return h.response({ message: "Unauthorized" }).code(401);
+        return h.response({ message: "Missing token" }).code(400);
       }
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
