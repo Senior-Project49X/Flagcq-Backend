@@ -7,6 +7,7 @@ module.exports = {
       CREATE TYPE "AccountTypes" AS ENUM (
         'StdAcc',
         'MISEmpAcc'
+        'AlumAcc'
       );
     `);
 

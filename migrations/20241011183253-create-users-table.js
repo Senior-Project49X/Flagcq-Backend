@@ -10,7 +10,6 @@ module.exports = {
     await queryInterface.createTable("Users", {
       user_id: {
         type: Sequelize.UUID,
-        defaultValue: Sequelize.UUIDV4,
         allowNull: false,
         primaryKey: true,
       },
@@ -37,7 +36,7 @@ module.exports = {
         allowNull: false,
       },
       AccType: {
-        type: Sequelize.ENUM("StdAcc", "MISEmpAcc"),
+        type: Sequelize.ENUM("StdAcc", "MISEmpAcc", "AlumAcc"),
         allowNull: false,
       },
       role: {

@@ -10,12 +10,14 @@ const Submited = db.Submited;
 const Point = db.Point;
 const Category = db.Category;
 const sequelize = db.sequelize;
-const { Op } = require("sequelize");
+const { Op, or } = require("sequelize");
 const Tournaments = db.Tournament;
 const QuestionTournament = db.QuestionTournament;
 const TournamentSubmited = db.TournamentSubmited;
 const TournamentPoints = db.TournamentPoints;
 const TeamScores = db.TeamScores;
+const Hint = db.Hint;
+const HintUsed = db.HintUsed;
 
 const questionController = {
   createQuestion: async (request, h) => {
@@ -30,8 +32,16 @@ const questionController = {
         difficultys_id,
         file,
         Practice,
+        Hints,
         Tournament, // array of tournament
       } = request.payload;
+
+      let ArrayHint = [];
+      try {
+        ArrayHint = JSON.parse(Hints);
+      } catch (error) {
+        return h.response({ message: "Invalid Hints format" }).code(400);
+      }
 
       let ArrayTournament = [];
       try {
@@ -163,6 +173,28 @@ const questionController = {
         { transaction }
       );
 
+      if (ArrayHint && ArrayHint.length > 0 && ArrayHint.length <= 3) {
+        const newHints = ArrayHint.map((hint) => ({
+          question_id: question.id,
+          Description: hint.detail,
+          point: hint.penalty,
+        }));
+
+        const totalPenalty = newHints.reduce(
+          (sum, curr) => sum + curr.point,
+          0
+        );
+        if (totalPenalty > question.point) {
+          return h
+            .response({ message: "Total penalty exceeds point" })
+            .code(400);
+        }
+
+        await Hint.bulkCreate(newHints, { transaction });
+      } else {
+        return h.response({ message: "Invalid Hints" }).code(400);
+      }
+
       if (validTournament.length > 0) {
         const newQuestionTournament = validTournament.map((tournament) => ({
           questions_id: question.id,
@@ -204,10 +236,7 @@ const questionController = {
 
       const user = await User.findOne({
         where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
+          itaccount: decoded.email,
         },
       });
 
@@ -234,6 +263,29 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
+      const HintData = await Hint.findAll({
+        where: { question_id: question.id },
+        attributes: ["Description", "point"],
+        order: [["id", "DESC"]],
+      });
+
+      let hintWithUsed = [];
+
+      if (HintData) {
+        hintWithUsed = await Promise.all(
+          HintData.map(async (hint) => {
+            const hintUsed = await HintUsed.findOne({
+              where: { hint_id: hint.id, user_id: user.user_id },
+            });
+
+            return {
+              ...hint.DataValues,
+              used: !!hintUsed,
+            };
+          })
+        );
+      }
+
       const isSolved = await Submited.findOne({
         where: { users_id: user.user_id, question_id: question.id },
       });
@@ -248,6 +300,7 @@ const questionController = {
         file_path: question.file_path,
         author: question.createdBy,
         solved: !!isSolved,
+        hints: hintWithUsed,
       };
 
       return h.response(data).code(200);
@@ -305,10 +358,7 @@ const questionController = {
 
       const user = await User.findOne({
         where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
+          itaccount: decoded.email,
         },
       });
 
@@ -403,7 +453,7 @@ const questionController = {
       }
 
       const user = await User.findOne({
-        where: { student_id: decoded.student_id },
+        where: { itaccount: decoded.email },
       });
 
       if (!user) {
@@ -477,6 +527,95 @@ const questionController = {
           totalItems: questionTournament.count,
           currentPage: page,
           totalPages: Math.ceil(questionTournament.count / limit),
+        })
+        .code(200);
+    } catch (error) {
+      return h.response({ message: error.message }).code(500);
+    }
+  },
+  getAllQuestions: async (request, h) => {
+    try {
+      const { page = 1, category, Difficulty } = request.query;
+
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
+      }
+
+      if (decoded.role !== "Admin") {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const parsedPage = parseInt(page, 10);
+      if (isNaN(parsedPage) || parsedPage <= 0) {
+        return h.response({ message: "Invalid page parameter" }).code(400);
+      }
+
+      const limit = 12;
+      const offset = (parsedPage - 1) * limit;
+      const validDifficulties = ["Easy", "Medium", "Hard"];
+      const where = {};
+
+      if (category) {
+        const validCategory = await Category.findOne({
+          where: { name: category },
+          attributes: ["id"],
+        });
+
+        if (!validCategory) {
+          return h.response({ message: "Category not found" }).code(404);
+        }
+
+        where.categories_id = validCategory.id;
+      }
+
+      if (Difficulty) {
+        if (!validDifficulties.includes(Difficulty)) {
+          return h
+            .response({ message: "Invalid difficulty parameter" })
+            .code(400);
+        }
+
+        where.difficultys_id = Difficulty;
+      }
+
+      const question = await Question.findAndCountAll({
+        where,
+        limit: limit,
+        offset: offset,
+        order: [
+          ["difficultys_id", "ASC"],
+          ["id", "ASC"],
+        ],
+        attributes: {
+          exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
+        },
+        include: [
+          {
+            model: Category,
+            as: "Category",
+            attributes: ["name"],
+          },
+        ],
+      });
+
+      const totalPages = Math.ceil(question.count / limit);
+      const hasNextPage = parsedPage < totalPages;
+
+      return h
+        .response({
+          data: question.rows,
+          totalItems: question.count,
+          currentPage: parsedPage,
+          totalPages: totalPages,
+          hasNextPage: hasNextPage,
         })
         .code(200);
     } catch (error) {
@@ -662,9 +801,15 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
         return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      if (decoded.role !== "Admin") {
+        return h.response({ message: "Unauthorized" }).code(401);
       }
 
       const question = await Question.findByPk(questionId);
@@ -691,6 +836,32 @@ const questionController = {
               .code(500);
           }
         }
+      }
+
+      const existingHints = await Hint.findAll({
+        where: { question_id: question.id },
+      });
+
+      if (existingHints.length > 0) {
+        await Hint.destroy({
+          where: { question_id: question.id },
+        });
+      }
+
+      const existingSubmited = await Submited.findAll({
+        where: { question_id: question.id },
+      });
+
+      if (existingSubmited.length > 0) {
+        const UserIds = existingSubmited.map((item) => item.users_id);
+        await Point.update(
+          { points: sequelize.literal("points - " + question.point) },
+          { where: { users_id: { [Op.in]: UserIds } } }
+        );
+
+        await Submited.destroy({
+          where: { question_id: question.id },
+        });
       }
 
       await question.destroy();
