@@ -1,12 +1,12 @@
 "use strict";
 
-const Joi = require("joi"); // Import Joi for payload validation
+const Joi = require("joi");
 const tournamentController = require("../controllers/tournamentController");
 
 const tournamentRoutes = [
   {
     method: "POST",
-    path: "/api/createtournament", // API endpoint for creating a tournament
+    path: "/api/createtournament",
     options: {
       validate: {
         payload: Joi.object({
@@ -43,9 +43,37 @@ const tournamentRoutes = [
       },
       description: "Create a new tournament",
       notes: "Allows basic creation of tournaments with proper dates.",
-      tags: ["api", "tournaments"], // Useful for Swagger documentation
+      tags: ["api", "tournaments"],
     },
     handler: tournamentController.createTournament,
+  },
+  {
+    method: "GET",
+    path: "/api/tournaments",
+    handler: tournamentController.getAllTournaments,
+    options: {
+      description: "Get all tournaments",
+      notes: "Returns a list of all tournaments.",
+      tags: ["api", "tournaments"],
+    },
+  },
+  {
+    method: "GET",
+    path: "/api/tournaments/{tournament_id}",
+    handler: tournamentController.getTournamentById,
+    options: {
+      validate: {
+        params: Joi.object({
+          tournament_id: Joi.number().integer().required().messages({
+            "number.base": "Tournament ID must be a number.",
+            "any.required": "Tournament ID is required.",
+          }),
+        }),
+      },
+      description: "Get a tournament by ID",
+      notes: "Returns details of a tournament by its ID.",
+      tags: ["api", "tournaments"],
+    },
   },
 ];
 

@@ -467,6 +467,42 @@ const teamController = {
       }).code(500);
     }
   },
+  
+  getAllTeamsInTournament: async (req, h) => {
+    try {
+      const { tournament_id } = req.params;
+
+      if (!tournament_id) {
+        return h.response({ message: "Tournament ID is required." }).code(400);
+      }
+
+      // Fetch all teams for the tournament
+      const teams = await Team.findAll({
+        where: { tournament_id },
+        // include: [
+        //   {
+        //     model: Users_Team,
+        //     as: 'usersTeams', // Make sure this alias matches your Sequelize associations
+        //     include: [
+        //       {
+        //         model: User,
+        //         as: 'user', // Make sure this alias matches your Sequelize associations
+        //         attributes: ['first_name', 'last_name'], // Only include necessary fields
+        //       }
+        //     ]
+        //   }
+        // ]
+      });
+
+      return h.response(teams).code(200);
+    } catch (error) {
+      console.error("Error retrieving teams:", error.message);
+      return h.response({
+        message: "Failed to retrieve teams.",
+        error: error.message,
+      }).code(500);
+    }
+  },
    
       
 

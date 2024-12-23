@@ -12,10 +12,21 @@ const teamRoutes = [
     path: "/teams/create",
     handler: teamController.createTeam,
   },{
+    method: "GET",
+    path: "/teams/tournament/{tournament_id}",
+    handler: teamController.getAllTeamsInTournament,
+    options: {
+      description: "Get all teams in a specific tournament",
+      notes: "Returns all teams with their members for a given tournament ID.",
+      tags: ["api", "teams"],
+    },
+  },{
+    // for test
     method: "POST",
     path: "/teams/createmock",
     handler: teamController.createTeamMock,
   },{
+    // for test
     method: "POST",
     path: "/teams/fakejoin",
     handler: teamController.joinFakeTeam,
