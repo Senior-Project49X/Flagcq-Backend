@@ -10,6 +10,7 @@ const questionRoute = require("./routes/questionRoutes");
 const teamRoute = require("./routes/teamRoutes"); // Import your team routes
 const Inert = require("@hapi/inert");
 const lbRoute = require("./routes/lbRoute");
+const tournamentRoutes = require("./routes/tournamentRoutes");
 
 const init = async () => {
   const server = Hapi.server({
@@ -82,6 +83,7 @@ const init = async () => {
   server.route(questionRoute);
   server.route(teamRoute);  // Add the team routes
   server.route(lbRoute); // Add Leaderboard routes
+  server.route(tournamentRoutes);
 
   await server.start();
   console.log("Server running on %s", server.info.uri);

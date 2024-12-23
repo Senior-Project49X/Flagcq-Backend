@@ -10,12 +10,13 @@ module.exports = (sequelize) => {
         type: DataTypes.INTEGER,
         primaryKey: true,
         allowNull: false,
+        autoIncrement: true,
       },
       name: {
         type: DataTypes.STRING(50),
         allowNull: false,
       },
-      Decsription: {
+      description: {
         type: DataTypes.STRING(500),
         allowNull: false,
       },
