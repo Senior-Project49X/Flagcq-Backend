@@ -150,7 +150,7 @@ const usersController = {
     try {
       const token = request.state["cmu-oauth-token"];
       if (!token) {
-        return h.response({ message: "Unauthorized 1" }).code(401);
+        return h.response({ message: "Unauthorized" }).code(401);
       }
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
@@ -264,7 +264,17 @@ const usersController = {
         return h.response({ message: "Invalid token" }).code(401);
       }
 
-      return h.response(decoded).code(200);
+      const user = await User.findOne({
+        where: {
+          itaccount: decoded.email,
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      return h.response({ ok: true, role: user.role }).code(200);
     } catch (err) {
       console.error(err);
       if (err.name === "TokenExpiredError") {
