@@ -265,7 +265,7 @@ const questionController = {
 
       const HintData = await Hint.findAll({
         where: { question_id: question.id },
-        attributes: ["Description", "point"],
+        attributes: ["id", "Description", "point"],
         order: [["id", "DESC"]],
       });
 
@@ -279,7 +279,7 @@ const questionController = {
             });
 
             return {
-              ...hint.DataValues,
+              ...hint.dataValues,
               used: !!hintUsed,
             };
           })
@@ -893,7 +893,7 @@ const questionController = {
       if (answer === Answer) {
         const user = await User.findOne({
           where: {
-            student_id: decoded.student_id,
+            itaccount: decoded.email,
           },
         });
 
@@ -968,10 +968,7 @@ const questionController = {
 
       const user = await User.findOne({
         where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
+          itaccount: decoded.email,
         },
       });
 
