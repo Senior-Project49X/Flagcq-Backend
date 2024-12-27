@@ -60,7 +60,7 @@ const tournamentRoutes = [
   {
     method: "GET",
     path: "/api/tournaments/{tournament_id}",
-    handler: tournamentController.getTournamentById,
+    handler: tournamentController.getTournamentDetails,
     options: {
       validate: {
         params: Joi.object({
@@ -70,8 +70,26 @@ const tournamentRoutes = [
           }),
         }),
       },
-      description: "Get a tournament by ID",
+      description: "Get a tournament details by ID",
       notes: "Returns details of a tournament by its ID.",
+      tags: ["api", "tournaments"],
+    },
+  },
+  {
+    method: "DELETE",
+    path: "/api/tournaments/{tournament_id}",
+    handler: tournamentController.deleteTournamentById,
+    options: {
+      validate: {
+        params: Joi.object({
+          tournament_id: Joi.number().integer().required().messages({
+            "number.base": "Tournament ID must be a number.",
+            "any.required": "Tournament ID is required.",
+          }),
+        }),
+      },
+      description: "Delete a tournament by ID",
+      notes: "Deletes a tournament and all related data by its ID.",
       tags: ["api", "tournaments"],
     },
   },

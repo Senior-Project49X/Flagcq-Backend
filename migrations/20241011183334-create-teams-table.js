@@ -37,7 +37,7 @@ module.exports = {
       unique: true,
     });
 
-    // Add a foreign key constraint for tournament_id referencing the Tournament table
+    // Add foreign key constraint with ON DELETE CASCADE
     await queryInterface.addConstraint("Teams", {
       fields: ["tournament_id"],
       type: "foreign key",

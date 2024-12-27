@@ -40,7 +40,11 @@ module.exports = (sequelize) => {
   );
 
   TeamScores.associate = function (models) {
-    TeamScores.belongsTo(models.Team, { foreignKey: "team_id" });
+    TeamScores.belongsTo(models.Team, { 
+      foreignKey: "team_id",
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE'
+     });
     TeamScores.belongsTo(models.Tournament, { foreignKey: "tournament_id" });
   };
 
