@@ -1,8 +1,6 @@
 "use strict";
 const path = require("path");
 const questionController = require("../controllers/questionController");
-const Joi = require("joi");
-const { validate } = require("uuid");
 const questionRoute = [
   {
     method: "POST",
@@ -54,6 +52,11 @@ const questionRoute = [
     method: "GET",
     path: "/api/questions/tournament",
     handler: questionController.getQuestionTournament,
+  },
+  {
+    method: "GET",
+    path: "/api/questions",
+    handler: questionController.getAllQuestions,
   },
   {
     method: "PUT",

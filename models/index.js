@@ -44,6 +44,8 @@ const TournamentSubmited = require("./tournamentsubmited")(
   sequelize,
   Sequelize.DataTypes
 );
+const Hint = require("./hints")(sequelize, Sequelize.DataTypes);
+const HintUsed = require("./hintused")(sequelize, Sequelize.DataTypes);
 
 db.Category = Category;
 db.Point = Point;
@@ -57,6 +59,8 @@ db.TeamScores = TeamScores;
 db.Tournament = Tournament;
 db.TournamentPoints = TournamentPoints;
 db.TournamentSubmited = TournamentSubmited;
+db.Hint = Hint;
+db.HintUsed = HintUsed;
 
 fs.readdirSync(__dirname)
   .filter((file) => {

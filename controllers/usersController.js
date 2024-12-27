@@ -68,6 +68,7 @@ const usersController = {
           student_id: user.student_id,
           email: user.itaccount,
           point: point.points,
+          role: user.role,
         },
         process.env.JWT_SECRET_KEY,
         { expiresIn: "1d" }
@@ -101,11 +102,55 @@ const usersController = {
       return h.response({ error: "Logout failed" }).code(500);
     }
   },
+  getAllUsers: async (request, h) => {
+    try {
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: {
+          itaccount: decoded.email,
+        },
+      });
+
+      if (user.role !== "Admin") {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const allUsers = await User.findAll({
+        attributes: [
+          "first_name",
+          "last_name",
+          "faculty",
+          "student_id",
+          "itaccount",
+          "role",
+        ],
+      });
+
+      return h.response(allUsers).code(200);
+    } catch (err) {
+      console.error(err);
+      if (err.name === "TokenExpiredError") {
+        return h.response({ message: "Token expired" }).code(401);
+      } else if (err.name === "JsonWebTokenError") {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+      return h.response({ error: "Get all users failed" }).code(500);
+    }
+  },
   getUserPractice: async (request, h) => {
     try {
       const token = request.state["cmu-oauth-token"];
       if (!token) {
-        return h.response({ message: "Unauthorized 1" }).code(401);
+        return h.response({ message: "Unauthorized" }).code(401);
       }
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
@@ -150,6 +195,7 @@ const usersController = {
           email: decoded.email,
           points: point.points,
           rank: rank,
+          role: decoded.role,
         })
         .code(200);
     } catch (err) {
@@ -208,6 +254,39 @@ const usersController = {
   // },
   testToken: async (request, h) => {
     try {
+      const { token } = request.payload;
+      if (!token) {
+        return h.response({ message: "Missing token" }).code(400);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: {
+          itaccount: decoded.email,
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      return h.response({ ok: true, role: user.role }).code(200);
+    } catch (err) {
+      console.error(err);
+      if (err.name === "TokenExpiredError") {
+        return h.response({ message: "Token expired" }).code(401);
+      } else if (err.name === "JsonWebTokenError") {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+      return h.response({ error: "Test token failed" }).code(500);
+    }
+  },
+  addRole: async (request, h) => {
+    try {
       const token = request.state["cmu-oauth-token"];
       if (!token) {
         return h.response({ message: "Unauthorized" }).code(401);
@@ -218,15 +297,40 @@ const usersController = {
         return h.response({ message: "Invalid token" }).code(401);
       }
 
-      return h.response(decoded).code(200);
+      let user = await User.findOne({
+        where: { itaccount: decoded.email },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      if (user.role !== "Admin") {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const { users } = request.payload;
+      let ArrayUsers = [];
+      try {
+        ArrayUsers = JSON.parse(users);
+        if (ArrayUsers.length === 0) {
+          return h.response({ message: "Empty array received" }).code(200);
+        }
+
+        if (
+          Array.isArray(nestedArrayUsers) &&
+          Array.isArray(nestedArrayUsers[0])
+        ) {
+          return h.response({ message: "Invalid Users format" }).code(400);
+        }
+      } catch (err) {
+        return h.response({ message: "Invalid Users format" }).code(400);
+      }
+
+      return h.response({ message: "Add admin successful" }).code(200);
     } catch (err) {
       console.error(err);
-      if (err.name === "TokenExpiredError") {
-        return h.response({ message: "Token expired" }).code(401);
-      } else if (err.name === "JsonWebTokenError") {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-      return h.response({ error: "Test token failed" }).code(500);
+      return h.response({ error: "Add admin failed" }).code(500);
     }
   },
 };

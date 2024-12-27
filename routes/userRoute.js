@@ -16,13 +16,18 @@ const userRoute = [
   },
   {
     method: "GET",
-    path: "/api/users",
+    path: "/api/user",
     handler: usersController.getUserPractice,
   },
   {
-    method: "GET",
+    method: "POST",
     path: "/api/token",
     handler: usersController.testToken,
+  },
+  {
+    method: "GET",
+    path: "/api/users",
+    handler: usersController.getAllUsers,
   },
 ];
 
