@@ -1061,6 +1061,74 @@ const questionController = {
       return h.response({ message: error.message }).code(500);
     }
   },
+  UseHint: async (request, h) => {
+    try {
+      const HintId = parseInt(request.params.id, 10);
+      if (isNaN(HintId)) {
+        return h.response({ message: "Invalid hint ID" }).code(400);
+      }
+
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: {
+          itaccount: decoded.email,
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      const hint = await Hint.findOne({
+        where: { id: HintId },
+      });
+
+      if (!hint) {
+        return h.response({ message: "Hint not found" }).code(404);
+      }
+
+      const existingHintUsed = await HintUsed.findOne({
+        where: { HintId, user_id: user.user_id },
+      });
+
+      if (existingHintUsed) {
+        return h.response({ message: "Hint already used" }).code(200);
+      }
+
+      const point = await Point.findOne({
+        where: { users_id: user.user_id },
+      });
+
+      if (!point) {
+        return h.response({ message: "Point not found" }).code(404);
+      }
+
+      if (point.points < hint.point) {
+        return h.response({ message: "Not enough points" }).code(400);
+      }
+
+      point.points -= hint.point;
+      await point.save();
+
+      await HintUsed.create({
+        hint_id: hint.id,
+        user_id: user.user_id,
+      });
+
+      return h.response({ message: "Hint used" }).code(200);
+    } catch (error) {
+      return h.response({ message: error.message }).code(500);
+    }
+  },
 };
 
 module.exports = questionController;

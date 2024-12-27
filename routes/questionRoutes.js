@@ -74,6 +74,11 @@ const questionRoute = [
     },
     handler: questionController.updateQuestion,
   },
+  {
+    method: "GET",
+    path: "/api/question/hint/{id}",
+    handler: questionController.UseHint,
+  },
 ];
 
 module.exports = questionRoute;
