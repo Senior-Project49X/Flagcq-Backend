@@ -37,7 +37,11 @@ module.exports = (sequelize) => {
   );
 
   Team.associate = function (models) {
-    Team.belongsTo(models.Tournament, { foreignKey: "tournament_id" });
+    Team.belongsTo(models.Tournament, {
+      foreignKey: 'tournament_id',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE'
+    });
     Team.belongsToMany(models.User, {
       through: models.Users_Team, 
       foreignKey: "team_id",
