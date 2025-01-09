@@ -1129,6 +1129,25 @@ const questionController = {
       return h.response({ message: error.message }).code(500);
     }
   },
+  getHintByID: async (request, h) => {
+    try {
+      const HintId = parseInt(request.params.id, 10);
+      if (isNaN(HintId)) {
+        return h.response({ message: "Invalid hint ID" }).code(400);
+      }
+
+      const hint = await Hint.findByPk(HintId, {
+        attributes: ["id", "Description", "point"],
+      });
+      if (!hint) {
+        return h.response({ message: "Hint not found" }).code(404);
+      }
+
+      return h.response(hint).code(200);
+    } catch (error) {
+      return h.response({ message: error.message }).code(500);
+    }
+  },
 };
 
 module.exports = questionController;
