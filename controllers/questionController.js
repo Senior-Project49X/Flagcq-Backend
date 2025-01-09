@@ -1136,6 +1136,16 @@ const questionController = {
         return h.response({ message: "Invalid hint ID" }).code(400);
       }
 
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
       const hint = await Hint.findByPk(HintId, {
         attributes: ["id", "Description", "point"],
       });
