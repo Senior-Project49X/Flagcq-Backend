@@ -1090,6 +1090,7 @@ const questionController = {
 
       const hint = await Hint.findOne({
         where: { id: HintId },
+        attributes: ["id", "point", "Description"],
       });
 
       if (!hint) {
@@ -1101,7 +1102,9 @@ const questionController = {
       });
 
       if (existingHintUsed) {
-        return h.response({ message: "Hint already used" }).code(200);
+        return h
+          .response({ message: "Hint already used", data: hint })
+          .code(200);
       }
 
       const point = await Point.findOne({
@@ -1124,36 +1127,7 @@ const questionController = {
         user_id: user.user_id,
       });
 
-      return h.response({ message: "Hint used" }).code(200);
-    } catch (error) {
-      return h.response({ message: error.message }).code(500);
-    }
-  },
-  getHintByID: async (request, h) => {
-    try {
-      const HintId = parseInt(request.params.id, 10);
-      if (isNaN(HintId)) {
-        return h.response({ message: "Invalid hint ID" }).code(400);
-      }
-
-      const token = request.state["cmu-oauth-token"];
-      if (!token) {
-        return h.response({ message: "Unauthorized" }).code(401);
-      }
-
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-
-      const hint = await Hint.findByPk(HintId, {
-        attributes: ["id", "Description", "point"],
-      });
-      if (!hint) {
-        return h.response({ message: "Hint not found" }).code(404);
-      }
-
-      return h.response(hint).code(200);
+      return h.response({ message: "Hint used", data: hint }).code(200);
     } catch (error) {
       return h.response({ message: error.message }).code(500);
     }

@@ -76,11 +76,6 @@ const questionRoute = [
   },
   {
     method: "GET",
-    path: "/api/question/hint/{id}",
-    handler: questionController.getHintByID,
-  },
-  {
-    method: "GET",
     path: "/api/question/usehint/{id}",
     handler: questionController.UseHint,
   },
