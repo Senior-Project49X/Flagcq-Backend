@@ -1097,7 +1097,7 @@ const questionController = {
       }
 
       const existingHintUsed = await HintUsed.findOne({
-        where: { HintId, user_id: user.user_id },
+        where: { hint_id: hint.id, user_id: user.user_id },
       });
 
       if (existingHintUsed) {
