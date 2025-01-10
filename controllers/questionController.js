@@ -1090,7 +1090,6 @@ const questionController = {
 
       const hint = await Hint.findOne({
         where: { id: HintId },
-        attributes: ["Description"],
       });
 
       if (!hint) {
@@ -1103,7 +1102,7 @@ const questionController = {
 
       if (existingHintUsed) {
         return h
-          .response({ message: "Hint already used", data: hint })
+          .response({ message: "Hint already used", data: hint.Description })
           .code(200);
       }
 
@@ -1127,7 +1126,9 @@ const questionController = {
         user_id: user.user_id,
       });
 
-      return h.response({ message: "Hint used", data: hint }).code(200);
+      return h
+        .response({ message: "Hint used", data: hint.Description })
+        .code(200);
     } catch (error) {
       return h.response({ message: error.message }).code(500);
     }
