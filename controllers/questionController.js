@@ -1090,7 +1090,7 @@ const questionController = {
 
       const hint = await Hint.findOne({
         where: { id: HintId },
-        attributes: ["id", "point", "Description"],
+        attributes: ["Description"],
       });
 
       if (!hint) {
