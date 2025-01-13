@@ -205,8 +205,6 @@ const questionController = {
         }
 
         await Hint.bulkCreate(newHints, { transaction });
-      } else {
-        return h.response({ message: "Invalid Hints" }).code(400);
       }
 
       if (validTournament.length > 0) {
