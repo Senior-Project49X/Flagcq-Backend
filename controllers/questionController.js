@@ -188,6 +188,19 @@ const questionController = {
       );
 
       if (ArrayHint && ArrayHint.length > 0 && ArrayHint.length <= 3) {
+        const hasInvalidHint = ArrayHint.some(
+          (hint) => !hint.detail || !hint.penalty
+        );
+
+        if (hasInvalidHint) {
+          return h
+            .response({
+              message:
+                "Each hint must have a non-empty 'detail' and a defined 'penalty' value.",
+            })
+            .code(400);
+        }
+
         const newHints = ArrayHint.map((hint) => ({
           question_id: question.id,
           Description: hint.detail,
