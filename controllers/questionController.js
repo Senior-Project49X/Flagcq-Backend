@@ -33,22 +33,23 @@ const questionController = {
         file,
         Practice,
         Hints,
-        Tournament, // array of tournament
+        Tournament,
       } = request.payload;
 
-      let ArrayHint = [];
+      let ArrayHint;
       try {
         ArrayHint = JSON.parse(Hints);
       } catch (error) {
         return h.response({ message: "Invalid Hints format" }).code(400);
       }
 
-      let ArrayTournament = [];
+      let ArrayTournament;
       try {
         ArrayTournament = JSON.parse(Tournament);
       } catch (error) {
         return h.response({ message: "Invalid Tournament format" }).code(400);
       }
+
       const parsedCategoriesId = parseInt(categories_id, 10);
       if (isNaN(parsedCategoriesId)) {
         return h.response({ message: "Invalid categories_id" }).code(400);
@@ -60,7 +61,6 @@ const questionController = {
       }
 
       const validDifficulties = ["Easy", "Medium", "Hard"];
-
       if (!title || !Description || !Answer || !difficultys_id) {
         return h.response({ message: "Missing required fields" }).code(400);
       }
@@ -84,9 +84,7 @@ const questionController = {
       }
 
       const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
+        where: { itaccount: decoded.email },
       });
 
       if (!user) {
@@ -187,52 +185,37 @@ const questionController = {
         { transaction }
       );
 
-      try {
-        console.log("Checking if there are any invalid hints...");
-        if (ArrayHint && ArrayHint.length > 0 && ArrayHint.length <= 3) {
-          const hasInvalidHint = ArrayHint.some(
-            (hint) =>
-              !hint.detail ||
-              hint.penalty === undefined ||
-              hint.penalty === null ||
-              hint.penalty < 0 ||
-              isNaN(hint.penalty)
+      if (ArrayHint && ArrayHint.length > 0 && ArrayHint.length <= 3) {
+        const hasInvalidHint = ArrayHint.some(
+          (hint) =>
+            !hint.detail ||
+            hint.penalty === undefined ||
+            hint.penalty === null ||
+            hint.penalty < 0 ||
+            isNaN(hint.penalty)
+        );
+
+        if (hasInvalidHint) {
+          throw new Error(
+            "Invalid hint format. Hint must have detail and penalty"
           );
-
-          if (hasInvalidHint) {
-            return h
-              .response({
-                message:
-                  "Invalid hint format. Hint must have detail and penalty",
-              })
-              .code(400);
-          }
-
-          console.log("Mapping new hints...");
-          const newHints = ArrayHint.map((hint) => ({
-            question_id: question.id,
-            Description: hint.detail,
-            point: hint.penalty,
-          }));
-
-          const totalPenalty = newHints.reduce(
-            (sum, curr) => sum + curr.point,
-            0
-          );
-          if (totalPenalty > question.point) {
-            return h
-              .response({ message: "Total penalty exceeds point" })
-              .code(400);
-          }
-
-          console.log("Creating hints in the database...");
-          await Hint.bulkCreate(newHints, { transaction });
-
-          console.log("Hints created successfully.");
         }
-      } catch (error) {
-        console.error("An error occurred:", error);
-        return h.response({ message: "An internal error occurred" }).code(500);
+
+        const newHints = ArrayHint.map((hint) => ({
+          question_id: question.id,
+          Description: hint.detail,
+          point: hint.penalty,
+        }));
+
+        const totalPenalty = newHints.reduce(
+          (sum, curr) => sum + curr.point,
+          0
+        );
+        if (totalPenalty > question.point) {
+          throw new Error("Total penalty exceeds point");
+        }
+
+        await Hint.bulkCreate(newHints, { transaction });
       }
 
       if (validTournament.length > 0) {
@@ -246,12 +229,15 @@ const questionController = {
         });
       }
 
+      // Commit the transaction since everything succeeded
       await transaction.commit();
-
       return h.response(question).code(201);
     } catch (error) {
-      await transaction.rollback();
-      console.error(error);
+      // Rollback transaction if there is any error
+      if (transaction) {
+        await transaction.rollback();
+      }
+      console.error("Error creating question:", error);
       return h.response({ message: error.message }).code(500);
     }
   },
