@@ -13,7 +13,7 @@ const categoryController = {
         return h.response({ error: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
       if (!decoded) {
         return h.response({ error: "Invalid token" }).code(401);
       }
@@ -35,7 +35,7 @@ const categoryController = {
         return h.response({ error: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
       if (!decoded) {
         return h.response({ error: "Invalid token" }).code(401);
       }
@@ -76,7 +76,7 @@ const categoryController = {
         return h.response({ error: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
       if (!decoded) {
         return h.response({ error: "Invalid token" }).code(401);
       }
@@ -117,7 +117,7 @@ const categoryController = {
         return h.response({ error: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
       if (!decoded) {
         return h.response({ error: "Invalid token" }).code(401);
       }
