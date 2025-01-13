@@ -838,7 +838,17 @@ const questionController = {
         return h.response({ message: "Invalid token" }).code(401);
       }
 
-      if (decoded.role !== "Admin") {
+      const user = await User.findOne({
+        where: {
+          itaccount: decoded.email,
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      if (user.role !== "Admin") {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
