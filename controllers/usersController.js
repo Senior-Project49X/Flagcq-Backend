@@ -5,6 +5,7 @@ const sequelize = db.sequelize;
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
 const { Op } = require("sequelize");
+const { it } = require("node:test");
 const User = db.User;
 const Point = db.Point;
 
@@ -68,7 +69,6 @@ const usersController = {
           student_id: user.student_id,
           email: user.itaccount,
           point: point.points,
-          role: user.role,
         },
         process.env.JWT_SECRET_KEY,
         { expiresIn: "1d" }
@@ -160,10 +160,7 @@ const usersController = {
 
       const user = await User.findOne({
         where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
+          itaccount: decoded.email,
         },
       });
 
@@ -195,7 +192,6 @@ const usersController = {
           email: decoded.email,
           points: point.points,
           rank: rank,
-          role: decoded.role,
         })
         .code(200);
     } catch (err) {

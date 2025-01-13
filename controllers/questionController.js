@@ -188,6 +188,23 @@ const questionController = {
       );
 
       if (ArrayHint && ArrayHint.length > 0 && ArrayHint.length <= 3) {
+        const hasInvalidHint = ArrayHint.some(
+          (hint) =>
+            !hint.detail ||
+            hint.penalty === undefined ||
+            hint.penalty === null ||
+            hint.penalty < 0 ||
+            isNaN(hint.penalty)
+        );
+
+        if (hasInvalidHint) {
+          return h
+            .response({
+              message: "Invalid hint format. Hint must have detail and penalty",
+            })
+            .code(400);
+        }
+
         const newHints = ArrayHint.map((hint) => ({
           question_id: question.id,
           Description: hint.detail,
@@ -825,7 +842,17 @@ const questionController = {
         return h.response({ message: "Invalid token" }).code(401);
       }
 
-      if (decoded.role !== "Admin") {
+      const user = await User.findOne({
+        where: {
+          itaccount: decoded.email,
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      if (user.role !== "Admin") {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
