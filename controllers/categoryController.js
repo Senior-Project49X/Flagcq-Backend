@@ -1,6 +1,7 @@
 "use strict";
 
 const db = require("../models");
+const jwt = require("jsonwebtoken");
 const Category = db.Category;
 const User = db.User;
 

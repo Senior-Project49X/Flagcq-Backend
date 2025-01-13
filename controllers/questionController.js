@@ -1087,7 +1087,22 @@ const questionController = {
   },
   downloadFile: async (request, h) => {
     try {
-      const question = await Question.findByPk(request.params.id);
+      const questionId = parseInt(request.params.id, 10);
+      if (isNaN(questionId)) {
+        return h.response({ message: "Invalid question ID" }).code(400);
+      }
+
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      const question = await Question.findByPk(questionId);
       if (!question) {
         return h.response({ message: "Question not found" }).code(404);
       }
