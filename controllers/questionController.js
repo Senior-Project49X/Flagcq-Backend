@@ -187,41 +187,52 @@ const questionController = {
         { transaction }
       );
 
-      if (ArrayHint && ArrayHint.length > 0 && ArrayHint.length <= 3) {
-        const hasInvalidHint = ArrayHint.some(
-          (hint) =>
-            !hint.detail ||
-            hint.penalty === undefined ||
-            hint.penalty === null ||
-            hint.penalty < 0 ||
-            isNaN(hint.penalty)
-        );
+      try {
+        console.log("Checking if there are any invalid hints...");
+        if (ArrayHint && ArrayHint.length > 0 && ArrayHint.length <= 3) {
+          const hasInvalidHint = ArrayHint.some(
+            (hint) =>
+              !hint.detail ||
+              hint.penalty === undefined ||
+              hint.penalty === null ||
+              hint.penalty < 0 ||
+              isNaN(hint.penalty)
+          );
 
-        if (hasInvalidHint) {
-          return h
-            .response({
-              message: "Invalid hint format. Hint must have detail and penalty",
-            })
-            .code(400);
+          if (hasInvalidHint) {
+            return h
+              .response({
+                message:
+                  "Invalid hint format. Hint must have detail and penalty",
+              })
+              .code(400);
+          }
+
+          console.log("Mapping new hints...");
+          const newHints = ArrayHint.map((hint) => ({
+            question_id: question.id,
+            Description: hint.detail,
+            point: hint.penalty,
+          }));
+
+          const totalPenalty = newHints.reduce(
+            (sum, curr) => sum + curr.point,
+            0
+          );
+          if (totalPenalty > question.point) {
+            return h
+              .response({ message: "Total penalty exceeds point" })
+              .code(400);
+          }
+
+          console.log("Creating hints in the database...");
+          await Hint.bulkCreate(newHints, { transaction });
+
+          console.log("Hints created successfully.");
         }
-
-        const newHints = ArrayHint.map((hint) => ({
-          question_id: question.id,
-          Description: hint.detail,
-          point: hint.penalty,
-        }));
-
-        const totalPenalty = newHints.reduce(
-          (sum, curr) => sum + curr.point,
-          0
-        );
-        if (totalPenalty > question.point) {
-          return h
-            .response({ message: "Total penalty exceeds point" })
-            .code(400);
-        }
-
-        await Hint.bulkCreate(newHints, { transaction });
+      } catch (error) {
+        console.error("An error occurred:", error);
+        return h.response({ message: "An internal error occurred" }).code(500);
       }
 
       if (validTournament.length > 0) {
@@ -961,7 +972,9 @@ const questionController = {
         });
 
         if (existingSubmission) {
-          return h.response({ message: "Already submitted" }).code(200);
+          return h
+            .response({ message: "Already submitted", solve: true })
+            .code(200);
         }
 
         await Submited.create({
