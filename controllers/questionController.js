@@ -10,7 +10,7 @@ const Submited = db.Submited;
 const Point = db.Point;
 const Category = db.Category;
 const sequelize = db.sequelize;
-const { Op, or } = require("sequelize");
+const { Op } = require("sequelize");
 const Tournaments = db.Tournament;
 const QuestionTournament = db.QuestionTournament;
 const TournamentSubmited = db.TournamentSubmited;
@@ -81,6 +81,20 @@ const questionController = {
         decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
       } catch (err) {
         return h.response({ message: "Invalid or expired token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: {
+          itaccount: decoded.email,
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      if (user.role !== "Admin") {
+        return h.response({ message: "Unauthorized" }).code(401);
       }
 
       const existingTitle = await Question.findOne({
