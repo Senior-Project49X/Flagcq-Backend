@@ -392,8 +392,8 @@ const questionController = {
         offset: offset,
         order: [
           ["difficultys_id", "ASC"],
-          ["id", "ASC"],
           ["categories_id", "ASC"],
+          ["id", "ASC"],
         ],
         attributes: {
           exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
@@ -488,8 +488,8 @@ const questionController = {
         offset: offset,
         order: [
           ["difficultys_id", "ASC"],
-          ["id", "ASC"],
           ["categories_id", "ASC"],
+          ["id", "ASC"],
         ],
         include: [
           {
