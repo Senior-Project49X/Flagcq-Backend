@@ -1,5 +1,7 @@
 const db = require("../models");
-const Tournament = db.Tournament;
+const { Team, Users_Team, TeamScores, User, TournamentPoints,Tournament } = db;
+const { Op } = require("sequelize");
+const jwt = require("jsonwebtoken");
 
 const tournamentController = {
   createTournament: async (req, h) => {
@@ -84,6 +86,33 @@ const tournamentController = {
 
   getTournamentDetails: async (req, h) => {
     try {
+
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized: No token provided." }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      // Retrieve user
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [
+            { student_id: decoded.student_id },
+            { itaccount: decoded.email },
+          ],
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+
+      // Use `user.id` for fetching details
+      const userId = user.user_id;
       const id = req.params.tournament_id;
       
       // Find tournament details
@@ -96,11 +125,10 @@ const tournamentController = {
       // Calculate remaining time
       const now = new Date();
       const eventEndDate = new Date(tournament.event_endDate);
-      const remainingTimeInSeconds = (eventEndDate - now) / 1000;
   
       // Individual score (example query from TournamentPoints)
       const individualScore = await TournamentPoints.sum('points', {
-        where: { tournament_id: id, users_id: req.auth.credentials.user_id }
+        where: { tournament_id: id, users_id: userId }
       });
   
       // Team scores and rank (reuse logic from getTournamentLeaderboard)
@@ -114,7 +142,24 @@ const tournamentController = {
         include: [{ model: Team, attributes: ["name"] }],
       });
   
-      const userTeamId = req.auth.credentials.team_id; // Example assumption
+      // Find user's team_id in the specified tournament
+      const userTeam = await Users_Team.findOne({
+        where: { users_id: userId },
+        include: {
+          model: Team,
+          where: { tournament_id: id },
+          as: "team",
+          attributes: ['id'], // Assuming id is the team_id
+          
+        },
+      });
+
+      if (!userTeam) {
+        return h.response({ message: "User is not part of any team in this tournament." }).code(404);
+      }
+      console.log(userTeam);
+      const userTeamId = userTeam.id;
+
       const rankedLeaderboard = teamScores.map((entry, index) => ({
         team_id: entry.team_id,
         team_name: entry.Team.name,
@@ -123,13 +168,17 @@ const tournamentController = {
       }));
   
       const userTeamRank = rankedLeaderboard.find(rank => rank.team_id === userTeamId);
+      // const userTeamName = rankedLeaderboard.find(team_name => team_name.team_id === userTeamId);
+      // console.log(rankedLeaderboard);
   
       return h.response({
         name: tournament.name,
-        remainingTime: remainingTimeInSeconds,
+        // remainingTime: remainingTimeInSeconds,
+        teamName: userTeamRank ? userTeamRank.team_name : null,
         teamRank: userTeamRank ? userTeamRank.rank : null,
         teamScore: userTeamRank ? userTeamRank.total_points : null,
         individualScore: individualScore || 0,
+        eventEndDate: tournament.event_endDate,
       }).code(200);
   
     } catch (error) {
