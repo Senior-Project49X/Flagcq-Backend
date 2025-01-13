@@ -35,6 +35,16 @@ const teamRoutes = [
     path: "/teams/{tournament_id}/{team_id}",
     handler: teamController.getTeamScores,
   },
+  {
+    method: 'DELETE',
+    path: '/teams/{tournament_id}',
+    handler: teamController.deleteTeam,
+    options: {
+      description: 'Delete a team and its members',
+      notes: 'Allows the team leader to delete the team and remove all members.',
+      tags: ['api', 'team'], // Tags for documentation plugins like Swagger
+    },
+  },
 ];
 
 module.exports = teamRoutes;

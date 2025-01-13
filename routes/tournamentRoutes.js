@@ -59,6 +59,16 @@ const tournamentRoutes = [
   },
   {
     method: "GET",
+    path: "/api/available_tournaments",
+    handler: tournamentController.getAvailableTournaments,
+    options: {
+      description: "Get all available tournaments",
+      notes: "Returns a list of all available tournaments.",
+      tags: ["api", "tournaments"],
+    },
+  },
+  {
+    method: "GET",
     path: "/api/tournaments/{tournament_id}",
     handler: tournamentController.getTournamentDetails,
     options: {

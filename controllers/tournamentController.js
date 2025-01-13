@@ -84,6 +84,28 @@ const tournamentController = {
     }
   },
 
+  getAvailableTournaments: async (req, h) => {
+    try {
+      const now = new Date();
+  
+      const tournaments = await Tournament.findAll({
+        where: {
+          enroll_endDate: {
+            [Op.gt]: now, // Check if enroll_endDate is greater than current time
+          },
+        },
+      });
+  
+      return h.response(tournaments).code(200);
+    } catch (error) {
+      console.error("Error fetching tournaments:", error);
+      return h.response({
+        message: "Failed to get tournaments",
+        error: error.message,
+      }).code(500);
+    }
+  },
+
   getTournamentDetails: async (req, h) => {
     try {
 
@@ -122,10 +144,6 @@ const tournamentController = {
         return h.response({ message: "Tournament not found" }).code(404);
       }
   
-      // Calculate remaining time
-      const now = new Date();
-      const eventEndDate = new Date(tournament.event_endDate);
-  
       // Individual score (example query from TournamentPoints)
       const individualScore = await TournamentPoints.sum('points', {
         where: { tournament_id: id, users_id: userId }
@@ -157,7 +175,7 @@ const tournamentController = {
       if (!userTeam) {
         return h.response({ message: "User is not part of any team in this tournament." }).code(404);
       }
-      console.log(userTeam);
+
       const userTeamId = userTeam.id;
 
       const rankedLeaderboard = teamScores.map((entry, index) => ({
@@ -168,12 +186,9 @@ const tournamentController = {
       }));
   
       const userTeamRank = rankedLeaderboard.find(rank => rank.team_id === userTeamId);
-      // const userTeamName = rankedLeaderboard.find(team_name => team_name.team_id === userTeamId);
-      // console.log(rankedLeaderboard);
   
       return h.response({
         name: tournament.name,
-        // remainingTime: remainingTimeInSeconds,
         teamName: userTeamRank ? userTeamRank.team_name : null,
         teamRank: userTeamRank ? userTeamRank.rank : null,
         teamScore: userTeamRank ? userTeamRank.total_points : null,

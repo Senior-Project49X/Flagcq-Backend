@@ -503,8 +503,85 @@ const teamController = {
       }).code(500);
     }
   },
-   
+  
+  deleteTeam: async (req, h) => {
+    try {
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized: No token provided." }).code(401);
+      }
+  
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+      console.log(decoded);
       
+      // Retrieve user
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [
+            { student_id: decoded.student_id },
+            { itaccount: decoded.email },
+          ],
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+  
+      const userId = user.user_id; // Assuming this is set in the token
+      const tournamentId = req.params.tournament_id;
+  
+      // Find user's team_id in the specified tournament
+      const userTeam = await Users_Team.findOne({
+        where: { users_id: userId },
+        include: {
+          model: Team,
+          where: { tournament_id: tournamentId },
+          as: "team",
+          attributes: ['id'], // Assuming id is the team_id
+        },
+      });
+  
+      if (!userTeam) {
+        return h.response({ message: "User is not part of any team in this tournament." }).code(404);
+      }
+      
+      const teamId = userTeam.id;
+  
+      // Find the leader of the team
+      const leaderRecord = await Users_Team.findOne({
+        where: { team_id: teamId },
+        order: [['createdAt', 'ASC']], // Order by oldest record
+      });
+  
+      if (!leaderRecord || leaderRecord.users_id !== userId) {
+        return h.response({
+          message: "Unauthorized: Only the team leader can delete the team.",
+        }).code(403);
+      }
+  
+      // Remove all users from the team
+      await Users_Team.destroy({
+        where: { team_id: teamId },
+      });
+  
+      // Delete the team
+      await Team.destroy({
+        where: { id: teamId },
+      });
+  
+      return h.response({ message: "Team and its members have been successfully deleted." }).code(200);
+    } catch (error) {
+      console.error("Error deleting team:", error);
+      return h.response({
+        message: "Failed to delete team",
+        error: error.message,
+      }).code(500);
+    }
+  },
 
 };
 
