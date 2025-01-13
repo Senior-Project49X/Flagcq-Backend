@@ -189,14 +189,18 @@ const questionController = {
 
       if (ArrayHint && ArrayHint.length > 0 && ArrayHint.length <= 3) {
         const hasInvalidHint = ArrayHint.some(
-          (hint) => !hint.detail || !hint.penalty
+          (hint) =>
+            !hint.detail ||
+            hint.penalty === undefined ||
+            hint.penalty === null ||
+            hint.penalty < 0 ||
+            isNaN(hint.penalty)
         );
 
         if (hasInvalidHint) {
           return h
             .response({
-              message:
-                "Each hint must have a non-empty 'detail' and a defined 'penalty' value.",
+              message: "Invalid hint format. Hint must have detail and penalty",
             })
             .code(400);
         }
