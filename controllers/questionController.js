@@ -393,6 +393,7 @@ const questionController = {
         order: [
           ["difficultys_id", "ASC"],
           ["id", "ASC"],
+          ["categories_id", "ASC"],
         ],
         attributes: {
           exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
@@ -485,7 +486,11 @@ const questionController = {
         where: { tournament_id: validTournament.id },
         limit: limit,
         offset: offset,
-        order: [["difficultys_id"], ["id", "ASC"]],
+        order: [
+          ["difficultys_id", "ASC"],
+          ["id", "ASC"],
+          ["categories_id", "ASC"],
+        ],
         include: [
           {
             model: Question,
