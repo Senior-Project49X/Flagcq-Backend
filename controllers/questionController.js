@@ -889,6 +889,16 @@ const questionController = {
         });
       }
 
+      const existingHintUsed = await HintUsed.findAll({
+        where: { hint_id: { [Op.in]: existingHints.map((item) => item.id) } },
+      });
+
+      if (existingHintUsed.length > 0) {
+        await HintUsed.destroy({
+          where: { hint_id: { [Op.in]: existingHints.map((item) => item.id) } },
+        });
+      }
+
       const existingSubmited = await Submited.findAll({
         where: { question_id: question.id },
       });
