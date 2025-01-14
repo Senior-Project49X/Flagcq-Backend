@@ -11,6 +11,8 @@ module.exports = (sequelize) => {
           model: "Hints",
           key: "id",
         },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
         unique: "unique_hint_used",
       },
       user_id: {
@@ -20,6 +22,8 @@ module.exports = (sequelize) => {
           model: "Users",
           key: "user_id",
         },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
         unique: "unique_hint_used",
       },
     },

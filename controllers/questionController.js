@@ -895,6 +895,11 @@ const questionController = {
       });
 
       if (existingHintUsed.length > 0) {
+        const UserIds = existingHintUsed.map((item) => item.user_id);
+        await Point.update(
+          { points: sequelize.literal("points + " + item.point) },
+          { where: { users_id: { [Op.in]: UserIds } } }
+        );
         await HintUsed.destroy({
           where: { hint_id: { [Op.in]: existingHints.map((item) => item.id) } },
         });
@@ -916,10 +921,10 @@ const questionController = {
         });
       }
 
-      await question.destroy();
-
       return h.response({ message: "Question has been deleted" }).code(200);
     } catch (error) {
+      console.log(error.message);
+
       return h.response({ message: error.message }).code(500);
     }
   },
