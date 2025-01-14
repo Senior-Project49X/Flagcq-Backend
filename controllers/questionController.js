@@ -208,9 +208,10 @@ const questionController = {
         }));
 
         const totalPenalty = newHints.reduce(
-          (sum, curr) => sum + curr.point,
+          (sum, curr) => sum + parseInt(curr.point, 10),
           0
         );
+
         if (totalPenalty > question.point) {
           throw new Error("Total penalty exceeds point");
         }
