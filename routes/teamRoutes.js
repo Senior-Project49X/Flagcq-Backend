@@ -34,8 +34,16 @@ const teamRoutes = [
     method: "GET",
     path: "/teams/{tournament_id}/{team_id}",
     handler: teamController.getTeamScores,
-  },
-  {
+  },{
+    method: 'GET',
+    path: '/teams/member_page/{tournament_id}/{team_id}',
+    handler: teamController.getTeamMemberPage,
+    options: {
+      description: 'Get team members',
+      notes: 'Fetches all members of a specific team within a tournament.',
+      tags: ['api', 'team'], // Tags for documentation plugins like Swagger
+    },
+  },{
     method: 'DELETE',
     path: '/teams/{tournament_id}',
     handler: teamController.deleteTeam,
