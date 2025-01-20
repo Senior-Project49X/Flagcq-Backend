@@ -19,6 +19,8 @@ module.exports = (sequelize) => {
           model: "Teams",
           key: "id",
         },
+        onUpdate: "CASCADE",
+        onDelete: "CASCADE",
       },
       tournament_id: {
         type: DataTypes.INTEGER,
@@ -27,6 +29,8 @@ module.exports = (sequelize) => {
           model: "Tournament",
           key: "id",
         },
+        onUpdate: "CASCADE",
+        onDelete: "CASCADE",
       },
       total_points: {
         type: DataTypes.INTEGER,
@@ -40,11 +44,9 @@ module.exports = (sequelize) => {
   );
 
   TeamScores.associate = function (models) {
-    TeamScores.belongsTo(models.Team, { 
+    TeamScores.belongsTo(models.Team, {
       foreignKey: "team_id",
-      onDelete: 'CASCADE',
-      onUpdate: 'CASCADE'
-     });
+    });
     TeamScores.belongsTo(models.Tournament, { foreignKey: "tournament_id" });
   };
 
