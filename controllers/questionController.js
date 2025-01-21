@@ -100,7 +100,7 @@ const questionController = {
       });
 
       if (existingTitle) {
-        return h.response({ message: "Title already exists" }).code(409);
+        return h.response({ message: "Topic already exists" }).code(409);
       }
 
       const existingFile = await Question.findOne({
@@ -207,10 +207,13 @@ const questionController = {
           point: hint.penalty,
         }));
 
-        const totalPenalty = newHints.reduce(
-          (sum, curr) => sum + parseInt(curr.point, 10),
-          0
-        );
+        const totalPenalty = newHints.reduce((sum, curr) => {
+          const point = parseInt(curr.point, 10);
+          if (isNaN(point)) {
+            throw new Error(`Invalid penalty format: ${curr.point}`);
+          }
+          return sum + point;
+        }, 0);
 
         if (totalPenalty > question.point) {
           throw new Error("Total penalty exceeds point");
@@ -581,7 +584,17 @@ const questionController = {
         return h.response({ message: "Invalid or expired token" }).code(401);
       }
 
-      if (decoded.role !== "Admin") {
+      const user = await User.findOne({
+        where: {
+          itaccount: decoded.email,
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      if (user.role !== "Admin") {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
@@ -624,6 +637,7 @@ const questionController = {
         offset: offset,
         order: [
           ["difficultys_id", "ASC"],
+          ["categories_id", "ASC"],
           ["id", "ASC"],
         ],
         attributes: {
