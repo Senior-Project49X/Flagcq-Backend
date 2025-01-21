@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 const db = require("../models");
-const { Team, Users_Team, TeamScores, User, TournamentPoints } = db;
+const { Team, Users_Team, TeamScores, User, TournamentPoints, Tournament } = db;
 const axios = require("axios");
 const { Op } = require("sequelize");
 
@@ -583,6 +583,88 @@ const teamController = {
     }
   },
 
+  getTeamMemberPage: async (req, h) => {
+    try {
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized: No token provided." }).code(401);
+      }
+  
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+  
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [
+            { student_id: decoded.student_id },
+            { itaccount: decoded.email },
+          ],
+        },
+      });
+  
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+  
+      const userId = user.user_id;
+      const tournamentId = req.params.tournament_id;
+      const teamId = req.params.team_id;
+  
+      const userTeam = await Users_Team.findOne({
+        where: { users_id: userId },
+        include: {
+          model: Team,
+          where: { id: teamId, tournament_id: tournamentId },
+          attributes: ['id', 'name', 'invite_code'],
+          as: "team",
+          include: {
+            model: Tournament,
+            attributes: ['name'],
+          },
+        },
+      });
+  
+      if (!userTeam || !userTeam.team) {
+        return h.response({ message: "User is not part of any team in this tournament." }).code(404);
+      }
+  
+      const team = userTeam.team;
+  
+      const teamMembers = await Users_Team.findAll({
+        where: { team_id: teamId },
+        include: {
+          model: User,
+          as: "user",
+          attributes: ['user_id', 'student_id', 'first_name', 'last_name'],
+        },
+        order: [['createdAt', 'ASC']],
+      });
+      
+      const members = teamMembers.map(member => ({
+        userId: member.user.user_id,
+        isLeader: member.createdAt === teamMembers[0].createdAt,
+        student_id: member.user.student_id,
+        first_name: member.user.first_name,
+        last_name: member.user.last_name,
+        
+      }));
+  
+      return h.response({
+        tournamentName: team.Tournament.name,
+        teamName: team.name,
+        invitedCode: team.invite_code,
+        members
+      }).code(200);
+    } catch (error) {
+      console.error("Error fetching team members:", error);
+      return h.response({
+        message: "Failed to get team members",
+        error: error.message,
+      }).code(500);
+    }
+  },
 };
 
 module.exports = teamController;
