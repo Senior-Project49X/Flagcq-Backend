@@ -73,8 +73,108 @@ const tournamentController = {
   
   getAllTournaments: async (req, h) => {
     try {
-      const tournaments = await Tournament.findAll();
-      return h.response(tournaments).code(200);
+      // const tournaments = await Tournament.findAll();
+      // return h.response(tournaments).code(200);
+
+      const { page = 1 } = req.query;
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized: No token provided." }).code(401);
+      }
+  
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Unauthorized: Invalid token." }).code(401);
+      }
+  
+      // Retrieve user
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [
+            { student_id: decoded.student_id },
+            { itaccount: decoded.email },
+          ],
+        },
+      });
+  
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+  
+      const userId = user.user_id;
+      const parsedPage = parseInt(page, 10);
+      if (isNaN(parsedPage) || parsedPage <= 0) {
+        return h.response({ message: "Invalid page parameter" }).code(400);
+      }
+
+      const limit = 10; // Number of tournaments per page
+      const offset = (parsedPage - 1) * limit;
+
+      // Fetch all tournaments
+      // const tournaments = await Tournament.findAll({
+      //   include: {
+      //     model: Team,
+      //     attributes: ['id', 'tournament_id'],
+      //     include: {
+      //       model: Users_Team,
+      //       where: { users_id: userId },
+      //       attributes: ['team_id'],
+      //       as: "usersTeams",
+      //       required: false, // Include tournaments even if the user isn't on a team
+      //     },
+      //   },
+      // });
+      const { count, rows: tournaments } = await Tournament.findAndCountAll({
+        include: {
+          model: Team,
+          attributes: ['id'],
+          include: {
+            model: Users_Team,
+            where: { users_id: userId },
+            attributes: ['team_id'],
+            as: "usersTeams",
+            required: false,
+          },
+        },
+        limit,
+        offset,
+      });
+
+      // Construct the response
+      const tournamentDetails = tournaments.map(tournament => {
+        const userTeam = (tournament.Teams || []).find(team => 
+          team.usersTeams && team.usersTeams.length > 0
+        );
+        
+  
+        return {
+          id: tournament.id,
+          name: tournament.name,
+          description: tournament.description,
+          enroll_startDate: tournament.enroll_startDate,
+          enroll_endDate: tournament.enroll_endDate,
+          event_startDate: tournament.event_startDate,
+          event_endDate: tournament.event_endDate,
+          createdAt: tournament.createdAt,
+          updatedAt: tournament.updatedAt,
+          hasJoined: !!userTeam, //not work
+          teamId: userTeam ? userTeam.id : null,
+          teamCount: tournament.Teams ? tournament.Teams.length : 0
+        };
+      });
+  
+      const totalPages = Math.ceil(count / limit);
+      const hasNextPage = parsedPage < totalPages;
+  
+      return h.response({
+        currentPage: parsedPage,
+        data: tournamentDetails,
+        totalItems: count,
+        totalPages: totalPages,
+        hasNextPage: hasNextPage,
+      }).code(200);
     } catch (error) {
       console.error("Error fetching tournaments:", error);
       return h.response({
