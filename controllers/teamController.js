@@ -515,7 +515,7 @@ const teamController = {
       if (!decoded) {
         return h.response({ message: "Invalid token" }).code(401);
       }
-      console.log(decoded);
+      // console.log(decoded);
       
       // Retrieve user
       const user = await User.findOne({
@@ -544,12 +544,14 @@ const teamController = {
           attributes: ['id'], // Assuming id is the team_id
         },
       });
+      console.log(userTeam);
   
       if (!userTeam) {
         return h.response({ message: "User is not part of any team in this tournament." }).code(404);
       }
       
-      const teamId = userTeam.id;
+      const teamId = userTeam.team_id;
+      console.log(teamId);
   
       // Find the leader of the team
       const leaderRecord = await Users_Team.findOne({
@@ -650,17 +652,88 @@ const teamController = {
         last_name: member.user.last_name,
         
       }));
+
+      const memberCount = teamMembers.length; // Count the number of team members
   
       return h.response({
         tournamentName: team.Tournament.name,
         teamName: team.name,
         invitedCode: team.invite_code,
+        memberCount,
         members
       }).code(200);
     } catch (error) {
       console.error("Error fetching team members:", error);
       return h.response({
         message: "Failed to get team members",
+        error: error.message,
+      }).code(500);
+    }
+  },
+
+  kickTeamMember: async (req, h) => {
+    try {
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized: No token provided." }).code(401);
+      }
+  
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+  
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [
+            { student_id: decoded.student_id },
+            { itaccount: decoded.email },
+          ],
+        },
+      });
+  
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+  
+      const userId = user.user_id;
+      const teamId = req.params.team_id;
+      const memberIdToKick = req.params.member_id;
+  
+      // Check if the user is the leader of the team
+      const leaderRecord = await Users_Team.findOne({
+        where: { team_id: teamId },
+        order: [['createdAt', 'ASC']],
+      });
+      
+  
+      if (!leaderRecord || leaderRecord.users_id !== userId) {
+        return h.response({
+          message: "Unauthorized: Only the team leader can kick members.",
+        }).code(403);
+      }
+  
+      // Ensure the member to kick is part of the team
+      const memberRecord = await Users_Team.findOne({
+        where: { team_id: teamId, users_id: memberIdToKick }
+      });
+  
+      if (!memberRecord) {
+        return h.response({
+          message: "Member not found or is not part of the team.",
+        }).code(404);
+      }
+  
+      // Kick the member from the team
+      await Users_Team.destroy({
+        where: { team_id: teamId, users_id: memberIdToKick }
+      });
+  
+      return h.response({ message: "Member successfully kicked from the team." }).code(200);
+    } catch (error) {
+      console.error("Error kicking team member:", error);
+      return h.response({
+        message: "Failed to kick team member",
         error: error.message,
       }).code(500);
     }

@@ -52,6 +52,15 @@ const teamRoutes = [
       notes: 'Allows the team leader to delete the team and remove all members.',
       tags: ['api', 'team'], // Tags for documentation plugins like Swagger
     },
+  },{
+    method: 'DELETE',
+    path: '/teams/member_page/{team_id}/{member_id}',
+    handler: teamController.kickTeamMember,
+    options: {
+      description: 'Kick a member from the team',
+      notes: 'Allows the team leader to kick a member from the team.',
+      tags: ['api', 'team'], // Tags for documentation plugins
+    },
   },
 ];
 
