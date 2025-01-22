@@ -23,7 +23,6 @@ module.exports = {
       CREATE TYPE "Role" AS ENUM (
         'User',
         'Admin'
-        'TA'
       );
     `);
   },
