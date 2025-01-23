@@ -511,11 +511,11 @@ const questionController = {
       const offset = (parsedPage - 1) * limit;
       const validDifficulties = ["Easy", "Medium", "Hard"];
       const validModes = ["Practice", "Tournament", "Unpublished"];
-      const where = {};
-      const question = {};
-      const totalPages = 0;
-      const hasNextPage = false;
-      const mappedData = [];
+      let where = {};
+      let question = {};
+      let totalPages = 0;
+      let hasNextPage = false;
+      let mappedData = [];
 
       if (category) {
         const validCategory = await Category.findOne({
