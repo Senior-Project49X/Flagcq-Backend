@@ -43,13 +43,6 @@ const questionController = {
         return h.response({ message: "Invalid Hints format" }).code(400);
       }
 
-      let ArrayTournament;
-      try {
-        ArrayTournament = JSON.parse(Tournament);
-      } catch (error) {
-        return h.response({ message: "Invalid Tournament format" }).code(400);
-      }
-
       const parsedCategoriesId = parseInt(categories_id, 10);
       if (isNaN(parsedCategoriesId)) {
         return h.response({ message: "Invalid categories_id" }).code(400);
@@ -147,28 +140,37 @@ const questionController = {
         }
       }
 
-      if (Practice !== "true" && Practice !== "false") {
-        return h.response({ message: "Invalid value for Practice" }).code(400);
-      }
-
-      let isPractice = Practice === "true";
-
-      let validTournament = [];
+      let isPractice = false;
       let isTournament = false;
-      if (ArrayTournament && ArrayTournament.length > 0) {
-        validTournament = await Tournaments.findAll({
-          where: { name: { [Op.in]: ArrayTournament } },
-          attributes: ["id"],
-          transaction,
-        });
 
-        if (validTournament.length !== ArrayTournament.length) {
+      if (Practice) {
+        if (Practice !== "true" && Practice !== "false") {
           return h
-            .response({ message: "Some tournaments are invalid" })
+            .response({ message: "Invalid value for Practice" })
+            .code(400);
+        } else if (Practice === "true") {
+          isPractice = true;
+          isTournament = false;
+        } else if (Practice === "true" && Tournament === "true") {
+          return h
+            .response({ message: "Invalid value for Practice and Tournament" })
             .code(400);
         }
-        isTournament = true;
-        isPractice = false;
+      }
+
+      if (Tournament) {
+        if (Tournament !== "true" && Tournament !== "false") {
+          return h
+            .response({ message: "Invalid value for Tournament" })
+            .code(400);
+        } else if (Tournament === "true") {
+          isPractice = false;
+          isTournament = true;
+        } else if (Tournament === "true" && Practice === "true") {
+          return h
+            .response({ message: "Invalid value for Practice and Tournament" })
+            .code(400);
+        }
       }
 
       const question = await Question.create(
@@ -224,20 +226,9 @@ const questionController = {
         await Hint.bulkCreate(newHints, { transaction });
       }
 
-      if (validTournament.length > 0) {
-        const newQuestionTournament = validTournament.map((tournament) => ({
-          questions_id: question.id,
-          tournament_id: tournament.id,
-        }));
-
-        await QuestionTournament.bulkCreate(newQuestionTournament, {
-          transaction,
-        });
-      }
-
       // Commit the transaction since everything succeeded
       await transaction.commit();
-      return h.response(question).code(201);
+      return h.response({ message: "Question created successfully" }).code(201);
     } catch (error) {
       // Rollback transaction if there is any error
       if (transaction) {
@@ -633,7 +624,6 @@ const questionController = {
         point: q.point,
         categories_name: q.Category?.name || null,
         difficultys_id: q.difficultys_id,
-        author: q.createdBy,
         mode: q.Practice
           ? "Practice"
           : q.Tournament
@@ -825,6 +815,7 @@ const questionController = {
     }
   },
   deleteQuestion: async (request, h) => {
+    const transaction = await sequelize.transaction();
     try {
       const questionId = parseInt(request.params.id, 10);
       if (isNaN(questionId)) {
@@ -843,11 +834,12 @@ const questionController = {
         return h.response({ message: "Invalid token" }).code(401);
       }
 
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
+      const user = await User.findOne(
+        {
+          where: { itaccount: decoded.email },
         },
-      });
+        { transaction }
+      );
 
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
@@ -857,7 +849,7 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const question = await Question.findByPk(questionId);
+      const question = await Question.findByPk(questionId, { transaction });
       if (!question) {
         return h.response({ message: "Question not found" }).code(404);
       }
@@ -885,49 +877,58 @@ const questionController = {
 
       const existingHints = await Hint.findAll({
         where: { question_id: question.id },
+        transaction,
       });
 
       if (existingHints.length > 0) {
         await Hint.destroy({
           where: { question_id: question.id },
+          transaction,
         });
       }
 
       const existingHintUsed = await HintUsed.findAll({
         where: { hint_id: { [Op.in]: existingHints.map((item) => item.id) } },
+        transaction,
       });
 
       if (existingHintUsed.length > 0) {
         const UserIds = existingHintUsed.map((item) => item.user_id);
         await Point.update(
           { points: sequelize.literal("points + " + item.point) },
-          { where: { users_id: { [Op.in]: UserIds } } }
+          { where: { users_id: { [Op.in]: UserIds } }, transaction }
         );
         await HintUsed.destroy({
           where: { hint_id: { [Op.in]: existingHints.map((item) => item.id) } },
+          transaction,
         });
       }
 
       const existingSubmited = await Submited.findAll({
         where: { question_id: question.id },
+        transaction,
       });
 
       if (existingSubmited.length > 0) {
         const UserIds = existingSubmited.map((item) => item.users_id);
         await Point.update(
           { points: sequelize.literal("points - " + question.point) },
-          { where: { users_id: { [Op.in]: UserIds } } }
+          { where: { users_id: { [Op.in]: UserIds } }, transaction }
         );
 
         await Submited.destroy({
           where: { question_id: question.id },
+          transaction,
         });
       }
 
+      await question.destroy({ transaction });
+
+      await transaction.commit();
       return h.response({ message: "Question has been deleted" }).code(200);
     } catch (error) {
+      await transaction.rollback();
       console.log(error.message);
-
       return h.response({ message: error.message }).code(500);
     }
   },
