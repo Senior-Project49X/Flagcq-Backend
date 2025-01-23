@@ -1,5 +1,7 @@
 "use strict";
 
+const { Tournament } = require("../models");
+
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     await queryInterface.createTable("Questions", {
@@ -44,6 +46,11 @@ module.exports = {
         allowNull: false,
       },
       Practice: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      Tournament: {
         type: Sequelize.BOOLEAN,
         allowNull: false,
         defaultValue: false,

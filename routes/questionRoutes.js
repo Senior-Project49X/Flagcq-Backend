@@ -50,11 +50,6 @@ const questionRoute = [
   },
   {
     method: "GET",
-    path: "/api/questions/tournament",
-    handler: questionController.getQuestionTournament,
-  },
-  {
-    method: "GET",
     path: "/api/questions",
     handler: questionController.getAllQuestions,
   },

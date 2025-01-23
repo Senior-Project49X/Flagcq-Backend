@@ -1,6 +1,7 @@
 "use strict";
 
 const { DataTypes } = require("sequelize");
+const { Tournament } = require(".");
 
 module.exports = (sequelize) => {
   const Question = sequelize.define(
@@ -41,6 +42,11 @@ module.exports = (sequelize) => {
         unique: true,
       },
       Practice: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      Tournament: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false,
