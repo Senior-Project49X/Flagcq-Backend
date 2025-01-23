@@ -634,6 +634,11 @@ const questionController = {
         categories_name: q.Category?.name || null,
         difficultys_id: q.difficultys_id,
         author: q.createdBy,
+        mode: q.Practice
+          ? "Practice"
+          : q.Tournament
+          ? "Tournament"
+          : "Unpublished",
       }));
 
       totalPages = Math.ceil(question.count / limit);
