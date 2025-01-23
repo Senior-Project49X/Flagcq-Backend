@@ -45,12 +45,12 @@ const questionRoute = [
   },
   {
     method: "GET",
-    path: "/api/questions/practice",
-    handler: questionController.getQuestionPractice,
+    path: "/api/questions/user",
+    handler: questionController.getQuestionUser,
   },
   {
     method: "GET",
-    path: "/api/questions",
+    path: "/api/questions/admin",
     handler: questionController.getAllQuestions,
   },
   {
