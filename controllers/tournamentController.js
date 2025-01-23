@@ -73,8 +73,108 @@ const tournamentController = {
   
   getAllTournaments: async (req, h) => {
     try {
-      const tournaments = await Tournament.findAll();
-      return h.response(tournaments).code(200);
+      // const tournaments = await Tournament.findAll();
+      // return h.response(tournaments).code(200);
+
+      const { page = 1 } = req.query;
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized: No token provided." }).code(401);
+      }
+  
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Unauthorized: Invalid token." }).code(401);
+      }
+  
+      // Retrieve user
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [
+            { student_id: decoded.student_id },
+            { itaccount: decoded.email },
+          ],
+        },
+      });
+  
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+  
+      const userId = user.user_id;
+      const parsedPage = parseInt(page, 10);
+      if (isNaN(parsedPage) || parsedPage <= 0) {
+        return h.response({ message: "Invalid page parameter" }).code(400);
+      }
+
+      const limit = 10; // Number of tournaments per page
+      const offset = (parsedPage - 1) * limit;
+
+      // Fetch all tournaments
+      // const tournaments = await Tournament.findAll({
+      //   include: {
+      //     model: Team,
+      //     attributes: ['id', 'tournament_id'],
+      //     include: {
+      //       model: Users_Team,
+      //       where: { users_id: userId },
+      //       attributes: ['team_id'],
+      //       as: "usersTeams",
+      //       required: false, // Include tournaments even if the user isn't on a team
+      //     },
+      //   },
+      // });
+      const { count, rows: tournaments } = await Tournament.findAndCountAll({
+        include: {
+          model: Team,
+          attributes: ['id'],
+          include: {
+            model: Users_Team,
+            where: { users_id: userId },
+            attributes: ['team_id'],
+            as: "usersTeams",
+            required: false,
+          },
+        },
+        limit,
+        offset,
+      });
+
+      // Construct the response
+      const tournamentDetails = tournaments.map(tournament => {
+        const userTeam = (tournament.Teams || []).find(team => 
+          team.usersTeams && team.usersTeams.length > 0
+        );
+        
+  
+        return {
+          id: tournament.id,
+          name: tournament.name,
+          description: tournament.description,
+          enroll_startDate: tournament.enroll_startDate,
+          enroll_endDate: tournament.enroll_endDate,
+          event_startDate: tournament.event_startDate,
+          event_endDate: tournament.event_endDate,
+          createdAt: tournament.createdAt,
+          updatedAt: tournament.updatedAt,
+          hasJoined: !!userTeam, //not work
+          teamId: userTeam ? userTeam.id : null,
+          teamCount: tournament.Teams ? tournament.Teams.length : 0
+        };
+      });
+  
+      const totalPages = Math.ceil(count / limit);
+      const hasNextPage = parsedPage < totalPages;
+  
+      return h.response({
+        currentPage: parsedPage,
+        data: tournamentDetails,
+        totalItems: count,
+        totalPages: totalPages,
+        hasNextPage: hasNextPage,
+      }).code(200);
     } catch (error) {
       console.error("Error fetching tournaments:", error);
       return h.response({
@@ -159,6 +259,7 @@ const tournamentController = {
         ],
         include: [{ model: Team, attributes: ["name"] }],
       });
+      
   
       // Find user's team_id in the specified tournament
       const userTeam = await Users_Team.findOne({
@@ -175,8 +276,10 @@ const tournamentController = {
       if (!userTeam) {
         return h.response({ message: "User is not part of any team in this tournament." }).code(404);
       }
+      // console.log(userTeam);
 
-      const userTeamId = userTeam.id;
+      const userTeamId = userTeam.team_id;
+      // console.log(userTeamId);
 
       const rankedLeaderboard = teamScores.map((entry, index) => ({
         team_id: entry.team_id,
@@ -184,11 +287,14 @@ const tournamentController = {
         total_points: entry.total_points,
         rank: index + 1,
       }));
+      // console.log(rankedLeaderboard);
   
       const userTeamRank = rankedLeaderboard.find(rank => rank.team_id === userTeamId);
+      
   
       return h.response({
         name: tournament.name,
+        teamId: userTeamRank ? userTeamRank.team_id : null,
         teamName: userTeamRank ? userTeamRank.team_name : null,
         teamRank: userTeamRank ? userTeamRank.rank : null,
         teamScore: userTeamRank ? userTeamRank.total_points : null,
