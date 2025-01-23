@@ -331,7 +331,7 @@ const questionController = {
       return h.response({ message: error.message }).code(500);
     }
   },
-  getQuestionPractice: async (request, h) => {
+  getQuestionUser: async (request, h) => {
     try {
       const {
         page = 1,
