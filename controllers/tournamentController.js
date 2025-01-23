@@ -259,6 +259,7 @@ const tournamentController = {
         ],
         include: [{ model: Team, attributes: ["name"] }],
       });
+      
   
       // Find user's team_id in the specified tournament
       const userTeam = await Users_Team.findOne({
@@ -275,8 +276,10 @@ const tournamentController = {
       if (!userTeam) {
         return h.response({ message: "User is not part of any team in this tournament." }).code(404);
       }
+      // console.log(userTeam);
 
-      const userTeamId = userTeam.id;
+      const userTeamId = userTeam.team_id;
+      // console.log(userTeamId);
 
       const rankedLeaderboard = teamScores.map((entry, index) => ({
         team_id: entry.team_id,
@@ -284,11 +287,14 @@ const tournamentController = {
         total_points: entry.total_points,
         rank: index + 1,
       }));
+      // console.log(rankedLeaderboard);
   
       const userTeamRank = rankedLeaderboard.find(rank => rank.team_id === userTeamId);
+      
   
       return h.response({
         name: tournament.name,
+        teamId: userTeamRank ? userTeamRank.team_id : null,
         teamName: userTeamRank ? userTeamRank.team_name : null,
         teamRank: userTeamRank ? userTeamRank.rank : null,
         teamScore: userTeamRank ? userTeamRank.total_points : null,
