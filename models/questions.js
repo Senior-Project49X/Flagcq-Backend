@@ -1,7 +1,6 @@
 "use strict";
 
 const { DataTypes } = require("sequelize");
-const { Tournament } = require(".");
 
 module.exports = (sequelize) => {
   const Question = sequelize.define(

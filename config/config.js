@@ -1,3 +1,5 @@
+const { log } = require("console");
+
 require("dotenv").config();
 
 module.exports = {
@@ -8,6 +10,7 @@ module.exports = {
     host: process.env.DB_HOST,
     port: process.env.DB_PORT || 5432,
     dialect: "postgres",
+    logging: false,
   },
   production: {
     username: process.env.DB_USER,
@@ -16,5 +19,6 @@ module.exports = {
     host: process.env.DB_HOST,
     port: process.env.DB_PORT || 5432,
     dialect: "postgres",
+    logging: false,
   },
 };
