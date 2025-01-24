@@ -81,7 +81,7 @@ const init = async () => {
   server.route(categoryRoute);
   server.route(userRoute);
   server.route(questionRoute);
-  server.route(teamRoute);  // Add the team routes
+  server.route(teamRoute); // Add the team routes
   server.route(lbRoute); // Add Leaderboard routes
   server.route(tournamentRoutes);
 
