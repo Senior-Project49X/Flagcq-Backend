@@ -18,6 +18,8 @@ const TournamentPoints = db.TournamentPoints;
 const TeamScores = db.TeamScores;
 const Hint = db.Hint;
 const HintUsed = db.HintUsed;
+const Team = db.Team;
+const User_Team = db.Users_Team;
 
 const questionController = {
   createQuestion: async (request, h) => {
@@ -226,11 +228,9 @@ const questionController = {
         await Hint.bulkCreate(newHints, { transaction });
       }
 
-      // Commit the transaction since everything succeeded
       await transaction.commit();
       return h.response({ message: "Question created successfully" }).code(201);
     } catch (error) {
-      // Rollback transaction if there is any error
       if (transaction) {
         await transaction.rollback();
       }
@@ -341,38 +341,6 @@ const questionController = {
         tournament_id,
       } = request.query;
 
-      const parsedPage = parseInt(page, 10);
-
-      if (isNaN(parsedPage) || parsedPage <= 0) {
-        return h.response({ message: "Invalid page parameter" }).code(400);
-      }
-
-      const limit = 12;
-      const offset = (parsedPage - 1) * limit;
-      const validDifficulties = ["Easy", "Medium", "Hard"];
-      const where = {};
-
-      if (category) {
-        const validCategory = await Category.findOne({
-          where: { name: category },
-          attributes: ["id"],
-        });
-
-        if (!validCategory) {
-          return h.response({ message: "Category not found" }).code(404);
-        }
-        where.categories_id = validCategory.id;
-      }
-
-      if (difficulty) {
-        if (!validDifficulties.includes(difficulty)) {
-          return h
-            .response({ message: "Invalid difficulty parameter" })
-            .code(400);
-        }
-        where.difficultys_id = difficulty;
-      }
-
       const token = request.state["cmu-oauth-token"];
       if (!token) {
         return h.response({ message: "Unauthorized" }).code(401);
@@ -395,15 +363,140 @@ const questionController = {
         return h.response({ message: "User not found" }).code(404);
       }
 
+      const parsedPage = parseInt(page, 10);
+
+      if (isNaN(parsedPage) || parsedPage <= 0) {
+        return h.response({ message: "Invalid page parameter" }).code(400);
+      }
+
+      const limit = 12;
+      const offset = (parsedPage - 1) * limit;
+      const validDifficulties = ["Easy", "Medium", "Hard"];
+      const validModes = ["Practice", "Tournament"];
+      let where = {};
+      let question = {};
+      let totalPages = 0;
+      let hasNextPage = false;
+      let mappedData = [];
+
+      if (category) {
+        const validCategory = await Category.findOne({
+          where: { name: category },
+          attributes: ["id"],
+        });
+
+        if (!validCategory) {
+          return h.response({ message: "Category not found" }).code(404);
+        }
+        where.categories_id = validCategory.id;
+      }
+
+      if (difficulty) {
+        if (!validDifficulties.includes(difficulty)) {
+          return h
+            .response({ message: "Invalid difficulty parameter" })
+            .code(400);
+        }
+        where.difficultys_id = difficulty;
+      }
+
       if (mode) {
-        if (mode === "Practice") {
-          where.Practice = true;
-        } else {
+        if (!validModes.includes(mode)) {
           return h.response({ message: "Invalid mode parameter" }).code(400);
+        } else if (mode === "Practice") {
+          where.Practice = true;
+          where.Tournament = false;
+        } else if (mode === "Tournament") {
+          if (!tournament_id) {
+            return h
+              .response({
+                message: "Missing tournament_id or Invalid tournament_id",
+              })
+              .code(400);
+          } else if (tournament_id) {
+            const parsedTournamentId = parseInt(tournament_id, 10);
+            if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
+              return h.response({ message: "Invalid tournament_id" }).code(400);
+            }
+
+            let Userteam = null;
+            let TournamentSovledIds = [];
+
+            if (user.role !== "Admin") {
+              Userteam = await User_Team.findOne({
+                where: { users_id: user.user_id },
+                include: [
+                  {
+                    model: Team,
+                    as: "Team",
+                    attributes: ["id", "tournament_id", "name"],
+                    where: { tournament_id: parsedTournamentId },
+                  },
+                ],
+              });
+              if (!Userteam) {
+                return h
+                  .response({ message: "User not in this tournament" })
+                  .code(404);
+              }
+
+              const TournamentSovled = await TournamentSubmited.findAll({
+                where: { team_id: Userteam.Team.id },
+              });
+              TournamentSovledIds = TournamentSovled.map(
+                (item) => item.question_id
+              );
+            }
+
+            where.Tournament = true;
+            where.Practice = false;
+            question = await QuestionTournament.findAll({
+              where: { tournament_id: parsedTournamentId },
+              include: [
+                {
+                  model: Question,
+                  as: "Question",
+                  where,
+                  attributes: {
+                    exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
+                  },
+                  include: [
+                    {
+                      model: Category,
+                      as: "Category",
+                      attributes: ["name"],
+                    },
+                  ],
+                },
+              ],
+            });
+          }
+
+          mappedData = question.map((q) => ({
+            id: q.Question.id,
+            title: q.Question.title,
+            point: q.Question.point,
+            categories_name: q.Question.Category?.name || null,
+            difficultys_id: q.Question.difficultys_id,
+            sovled: TournamentSovledIds.includes(q.Question.id),
+          }));
+
+          totalPages = Math.ceil(question.count / limit);
+          hasNextPage = parsedPage < totalPages;
+
+          return h
+            .response({
+              data: mappedData,
+              totalItems: mappedData.length,
+              currentPage: parsedPage,
+              totalPages: totalPages,
+              hasNextPage: hasNextPage,
+            })
+            .code(200);
         }
       }
 
-      const question = await Question.findAndCountAll({
+      question = await Question.findAndCountAll({
         where,
         limit: limit,
         offset: offset,
@@ -431,7 +524,7 @@ const questionController = {
 
       const solvedIds = solvedQuestions.map((item) => item.question_id);
 
-      const mappedData = question.rows.map((q) => ({
+      mappedData = question.rows.map((q) => ({
         id: q.id,
         title: q.title,
         point: q.point,
@@ -441,8 +534,8 @@ const questionController = {
         solved: solvedIds.includes(q.id),
       }));
 
-      const totalPages = Math.ceil(question.count / limit);
-      const hasNextPage = parsedPage < totalPages;
+      totalPages = Math.ceil(question.count / limit);
+      hasNextPage = parsedPage < totalPages;
 
       return h
         .response({
