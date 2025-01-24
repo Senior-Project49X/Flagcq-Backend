@@ -263,15 +263,16 @@ const questionController = {
         },
       });
 
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
       const question = await Question.findByPk(questionId, {
         attributes: {
-          exclude: [
-            "Answer",
-            "createdAt",
-            "createdBy",
-            "updatedAt",
-            "Practice",
-          ],
+          exclude:
+            user.role === "Admin"
+              ? ["createdAt", "updatedAt"]
+              : ["Answer", "createdAt", "createdBy", "updatedAt", "Practice"],
         },
         include: [
           {
@@ -1239,6 +1240,14 @@ const questionController = {
         return h.response({ message: "Invalid hint ID" }).code(400);
       }
 
+      const hint = await Hint.findOne({
+        where: { id: HintId },
+      });
+
+      if (!hint) {
+        return h.response({ message: "Hint not found" }).code(404);
+      }
+
       const token = request.state["cmu-oauth-token"];
       if (!token) {
         return h.response({ message: "Unauthorized" }).code(401);
@@ -1259,12 +1268,8 @@ const questionController = {
         return h.response({ message: "User not found" }).code(404);
       }
 
-      const hint = await Hint.findOne({
-        where: { id: HintId },
-      });
-
-      if (!hint) {
-        return h.response({ message: "Hint not found" }).code(404);
+      if (user.role === "Admin") {
+        return h.response({ data: hint.Description }).code(200);
       }
 
       const existingHintUsed = await HintUsed.findOne({
