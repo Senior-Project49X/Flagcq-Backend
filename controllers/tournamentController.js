@@ -1,5 +1,5 @@
 const db = require("../models");
-const { Team, Users_Team, TeamScores, User, TournamentPoints,Tournament } = db;
+const { Team, Users_Team, TeamScores, User, TournamentPoints, Tournament } = db;
 const { Op } = require("sequelize");
 const jwt = require("jsonwebtoken");
 
@@ -18,36 +18,44 @@ const tournamentController = {
       // Check for duplicate name
       const existingTournament = await Tournament.findOne({ where: { name } });
       if (existingTournament) {
-        return h.response({
-          message: "Tournament name already exists",
-        }).code(400);
+        return h
+          .response({
+            message: "Tournament name already exists",
+          })
+          .code(400);
       }
-  
+
       // Convert dates to Date objects for comparison
       const enrollStart = new Date(enroll_startDate);
       const enrollEnd = new Date(enroll_endDate);
       const eventStart = new Date(event_startDate);
       const eventEnd = new Date(event_endDate);
-  
+
       // Validate date sequence
       if (enrollStart >= enrollEnd) {
-        return h.response({
-          message: "Enrollment start date must be before enrollment end date",
-        }).code(400);
+        return h
+          .response({
+            message: "Enrollment start date must be before enrollment end date",
+          })
+          .code(400);
       }
-  
+
       if (enrollEnd >= eventStart) {
-        return h.response({
-          message: "Enrollment end date must be before event start date",
-        }).code(400);
+        return h
+          .response({
+            message: "Enrollment end date must be before event start date",
+          })
+          .code(400);
       }
-  
+
       if (eventStart >= eventEnd) {
-        return h.response({
-          message: "Event start date must be before event end date",
-        }).code(400);
+        return h
+          .response({
+            message: "Event start date must be before event end date",
+          })
+          .code(400);
       }
-  
+
       // Create the tournament if dates are valid
       const newTournament = await Tournament.create({
         name,
@@ -57,20 +65,24 @@ const tournamentController = {
         event_startDate,
         event_endDate,
       });
-  
-      return h.response({
-        message: "Tournament created successfully",
-        tournament: newTournament,
-      }).code(201);
+
+      return h
+        .response({
+          message: "Tournament created successfully",
+          tournament: newTournament,
+        })
+        .code(201);
     } catch (error) {
       console.error("Error creating tournament:", error);
-      return h.response({
-        message: "Failed to create tournament",
-        error: error.message,
-      }).code(500);
+      return h
+        .response({
+          message: "Failed to create tournament",
+          error: error.message,
+        })
+        .code(500);
     }
   },
-  
+
   getAllTournaments: async (req, h) => {
     try {
       // const tournaments = await Tournament.findAll();
@@ -79,16 +91,20 @@ const tournamentController = {
       const { page = 1 } = req.query;
       const token = req.state["cmu-oauth-token"];
       if (!token) {
-        return h.response({ message: "Unauthorized: No token provided." }).code(401);
+        return h
+          .response({ message: "Unauthorized: No token provided." })
+          .code(401);
       }
-  
+
       let decoded;
       try {
         decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
       } catch (err) {
-        return h.response({ message: "Unauthorized: Invalid token." }).code(401);
+        return h
+          .response({ message: "Unauthorized: Invalid token." })
+          .code(401);
       }
-  
+
       // Retrieve user
       const user = await User.findOne({
         where: {
@@ -98,18 +114,18 @@ const tournamentController = {
           ],
         },
       });
-  
+
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
       }
-  
+
       const userId = user.user_id;
       const parsedPage = parseInt(page, 10);
       if (isNaN(parsedPage) || parsedPage <= 0) {
         return h.response({ message: "Invalid page parameter" }).code(400);
       }
 
-      const limit = 10; // Number of tournaments per page
+      const limit = 4; // Number of tournaments per page
       const offset = (parsedPage - 1) * limit;
 
       // Fetch all tournaments
@@ -129,11 +145,11 @@ const tournamentController = {
       const { count, rows: tournaments } = await Tournament.findAndCountAll({
         include: {
           model: Team,
-          attributes: ['id'],
+          attributes: ["id"],
           include: {
             model: Users_Team,
             where: { users_id: userId },
-            attributes: ['team_id'],
+            attributes: ["team_id"],
             as: "usersTeams",
             required: false,
           },
@@ -143,12 +159,11 @@ const tournamentController = {
       });
 
       // Construct the response
-      const tournamentDetails = tournaments.map(tournament => {
-        const userTeam = (tournament.Teams || []).find(team => 
-          team.usersTeams && team.usersTeams.length > 0
+      const tournamentDetails = tournaments.map((tournament) => {
+        const userTeam = (tournament.Teams || []).find(
+          (team) => team.usersTeams && team.usersTeams.length > 0
         );
-        
-  
+
         return {
           id: tournament.id,
           name: tournament.name,
@@ -161,33 +176,37 @@ const tournamentController = {
           updatedAt: tournament.updatedAt,
           hasJoined: !!userTeam, //not work
           teamId: userTeam ? userTeam.id : null,
-          teamCount: tournament.Teams ? tournament.Teams.length : 0
+          teamCount: tournament.Teams ? tournament.Teams.length : 0,
         };
       });
-  
+
       const totalPages = Math.ceil(count / limit);
       const hasNextPage = parsedPage < totalPages;
-  
-      return h.response({
-        currentPage: parsedPage,
-        data: tournamentDetails,
-        totalItems: count,
-        totalPages: totalPages,
-        hasNextPage: hasNextPage,
-      }).code(200);
+
+      return h
+        .response({
+          currentPage: parsedPage,
+          data: tournamentDetails,
+          totalItems: count,
+          totalPages: totalPages,
+          hasNextPage: hasNextPage,
+        })
+        .code(200);
     } catch (error) {
       console.error("Error fetching tournaments:", error);
-      return h.response({
-        message: "Failed to get tournaments",
-        error: error.message,
-      }).code(500);
+      return h
+        .response({
+          message: "Failed to get tournaments",
+          error: error.message,
+        })
+        .code(500);
     }
   },
 
   getAvailableTournaments: async (req, h) => {
     try {
       const now = new Date();
-  
+
       const tournaments = await Tournament.findAll({
         where: {
           enroll_endDate: {
@@ -195,23 +214,26 @@ const tournamentController = {
           },
         },
       });
-  
+
       return h.response(tournaments).code(200);
     } catch (error) {
       console.error("Error fetching tournaments:", error);
-      return h.response({
-        message: "Failed to get tournaments",
-        error: error.message,
-      }).code(500);
+      return h
+        .response({
+          message: "Failed to get tournaments",
+          error: error.message,
+        })
+        .code(500);
     }
   },
 
   getTournamentDetails: async (req, h) => {
     try {
-
       const token = req.state["cmu-oauth-token"];
       if (!token) {
-        return h.response({ message: "Unauthorized: No token provided." }).code(401);
+        return h
+          .response({ message: "Unauthorized: No token provided." })
+          .code(401);
       }
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
@@ -236,19 +258,19 @@ const tournamentController = {
       // Use `user.id` for fetching details
       const userId = user.user_id;
       const id = req.params.tournament_id;
-      
+
       // Find tournament details
       const tournament = await Tournament.findByPk(id);
-      
+
       if (!tournament) {
         return h.response({ message: "Tournament not found" }).code(404);
       }
-  
+
       // Individual score (example query from TournamentPoints)
-      const individualScore = await TournamentPoints.sum('points', {
-        where: { tournament_id: id, users_id: userId }
+      const individualScore = await TournamentPoints.sum("points", {
+        where: { tournament_id: id, users_id: userId },
       });
-  
+
       // Team scores and rank (reuse logic from getTournamentLeaderboard)
       const teamScores = await TeamScores.findAll({
         where: { tournament_id: id },
@@ -259,8 +281,7 @@ const tournamentController = {
         ],
         include: [{ model: Team, attributes: ["name"] }],
       });
-      
-  
+
       // Find user's team_id in the specified tournament
       const userTeam = await Users_Team.findOne({
         where: { users_id: userId },
@@ -268,13 +289,16 @@ const tournamentController = {
           model: Team,
           where: { tournament_id: id },
           as: "team",
-          attributes: ['id'], // Assuming id is the team_id
-          
+          attributes: ["id"], // Assuming id is the team_id
         },
       });
 
       if (!userTeam) {
-        return h.response({ message: "User is not part of any team in this tournament." }).code(404);
+        return h
+          .response({
+            message: "User is not part of any team in this tournament.",
+          })
+          .code(404);
       }
       // console.log(userTeam);
 
@@ -288,26 +312,30 @@ const tournamentController = {
         rank: index + 1,
       }));
       // console.log(rankedLeaderboard);
-  
-      const userTeamRank = rankedLeaderboard.find(rank => rank.team_id === userTeamId);
-      
-  
-      return h.response({
-        name: tournament.name,
-        teamId: userTeamRank ? userTeamRank.team_id : null,
-        teamName: userTeamRank ? userTeamRank.team_name : null,
-        teamRank: userTeamRank ? userTeamRank.rank : null,
-        teamScore: userTeamRank ? userTeamRank.total_points : null,
-        individualScore: individualScore || 0,
-        eventEndDate: tournament.event_endDate,
-      }).code(200);
-  
+
+      const userTeamRank = rankedLeaderboard.find(
+        (rank) => rank.team_id === userTeamId
+      );
+
+      return h
+        .response({
+          name: tournament.name,
+          teamId: userTeamRank ? userTeamRank.team_id : null,
+          teamName: userTeamRank ? userTeamRank.team_name : null,
+          teamRank: userTeamRank ? userTeamRank.rank : null,
+          teamScore: userTeamRank ? userTeamRank.total_points : null,
+          individualScore: individualScore || 0,
+          eventEndDate: tournament.event_endDate,
+        })
+        .code(200);
     } catch (error) {
       console.error("Error fetching tournament details:", error);
-      return h.response({
-        message: "Failed to get tournament details",
-        error: error.message,
-      }).code(500);
+      return h
+        .response({
+          message: "Failed to get tournament details",
+          error: error.message,
+        })
+        .code(500);
     }
   },
 
@@ -323,16 +351,19 @@ const tournamentController = {
       // Simply delete the tournament, cascade will handle related entries
       await Tournament.destroy({ where: { id } });
 
-      return h.response({ message: "Tournament deleted successfully" }).code(200);
+      return h
+        .response({ message: "Tournament deleted successfully" })
+        .code(200);
     } catch (error) {
       console.error("Error deleting tournament:", error);
-      return h.response({
-        message: "Failed to delete tournament",
-        error: error.message,
-      }).code(500);
+      return h
+        .response({
+          message: "Failed to delete tournament",
+          error: error.message,
+        })
+        .code(500);
     }
   },
-  
 };
 
 module.exports = tournamentController;
