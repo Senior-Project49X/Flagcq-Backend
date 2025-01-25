@@ -495,6 +495,8 @@ const questionController = {
             })
             .code(200);
         }
+      } else {
+        return h.response({ message: "Invalid mode parameter" }).code(400);
       }
 
       question = await Question.findAndCountAll({
