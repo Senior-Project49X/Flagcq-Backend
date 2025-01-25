@@ -638,31 +638,52 @@ const questionController = {
             if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
               return h.response({ message: "Invalid tournament_id" }).code(400);
             }
-          }
-          where.Tournament = true;
-          where.Practice = false;
-          question = await QuestionTournament.findAll({
-            where: parsedTournamentId
-              ? { tournament_id: parsedTournamentId }
-              : {},
-            include: [
-              {
-                model: Question,
-                as: "Question",
-                where,
-                attributes: {
-                  exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
-                },
-                include: [
-                  {
-                    model: Category,
-                    as: "Category",
-                    attributes: ["name"],
+            where.Tournament = true;
+            where.Practice = false;
+            question = await QuestionTournament.findAndCountAll({
+              where: { tournament_id: parsedTournamentId },
+              include: [
+                {
+                  model: Question,
+                  as: "Question",
+                  where,
+                  attributes: {
+                    exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
                   },
-                ],
+                  include: [
+                    {
+                      model: Category,
+                      as: "Category",
+                      attributes: ["name"],
+                    },
+                  ],
+                },
+              ],
+            });
+          } else {
+            where.Tournament = true;
+            where.Practice = false;
+            question = await Question.findAndCountAll({
+              where,
+              limit: limit,
+              offset: offset,
+              order: [
+                ["difficultys_id", "ASC"],
+                ["categories_id", "ASC"],
+                ["id", "ASC"],
+              ],
+              attributes: {
+                exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
               },
-            ],
-          });
+              include: [
+                {
+                  model: Category,
+                  as: "Category",
+                  attributes: ["name"],
+                },
+              ],
+            });
+          }
 
           mappedData = question.map((q) => ({
             id: q.Question.id,
