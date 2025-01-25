@@ -451,7 +451,7 @@ const questionController = {
 
             where.Tournament = true;
             where.Practice = false;
-            question = await QuestionTournament.findAll({
+            question = await QuestionTournament.findAndCountAll({
               where: { tournament_id: parsedTournamentId },
               include: [
                 {
@@ -473,13 +473,13 @@ const questionController = {
             });
           }
 
-          mappedData = question.map((q) => ({
-            id: q.Question.id,
-            title: q.Question.title,
-            point: q.Question.point,
-            categories_name: q.Question.Category?.name || null,
-            difficultys_id: q.Question.difficultys_id,
-            sovled: TournamentSovledIds.includes(q.Question.id),
+          mappedData = question.rows.map((q) => ({
+            id: q.id,
+            title: q.title,
+            point: q.point,
+            categories_name: q.Category?.name || null,
+            difficultys_id: q.difficultys_id,
+            sovled: TournamentSovledIds.includes(q.id),
           }));
 
           totalPages = Math.ceil(question.count / limit);
@@ -685,13 +685,14 @@ const questionController = {
             });
           }
 
-          mappedData = question.map((q) => ({
-            id: q.Question.id,
-            title: q.Question.title,
-            point: q.Question.point,
-            categories_name: q.Question.Category?.name || null,
-            difficultys_id: q.Question.difficultys_id,
-            author: q.Question.createdBy,
+          mappedData = question.rows.map((q) => ({
+            id: q.id,
+            title: q.title,
+            point: q.point,
+            categories_name: q.Category?.name || null,
+            difficultys_id: q.difficultys_id,
+            author: q.createdBy,
+            mode: "Tournament",
           }));
 
           totalPages = Math.ceil(question.count / limit);
@@ -794,7 +795,7 @@ const questionController = {
         difficultys_id,
         file,
         Practice,
-        Tournament, // array of tournament
+        Tournament,
       } = request.payload;
 
       if (title) {
