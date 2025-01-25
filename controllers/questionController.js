@@ -451,7 +451,7 @@ const questionController = {
 
             where.Tournament = true;
             where.Practice = false;
-            question = await QuestionTournament.findAll({
+            question = await QuestionTournament.findAndCountAll({
               where: { tournament_id: parsedTournamentId },
               include: [
                 {
@@ -473,13 +473,13 @@ const questionController = {
             });
           }
 
-          mappedData = question.map((q) => ({
-            id: q.Question.id,
-            title: q.Question.title,
-            point: q.Question.point,
-            categories_name: q.Question.Category?.name || null,
-            difficultys_id: q.Question.difficultys_id,
-            sovled: TournamentSovledIds.includes(q.Question.id),
+          mappedData = question.rows.map((q) => ({
+            id: q.id,
+            title: q.title,
+            point: q.point,
+            categories_name: q.Category?.name || null,
+            difficultys_id: q.difficultys_id,
+            sovled: TournamentSovledIds.includes(q.id),
           }));
 
           totalPages = Math.ceil(question.count / limit);
@@ -495,6 +495,8 @@ const questionController = {
             })
             .code(200);
         }
+      } else {
+        return h.response({ message: "Invalid mode parameter" }).code(400);
       }
 
       question = await Question.findAndCountAll({
@@ -638,39 +640,61 @@ const questionController = {
             if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
               return h.response({ message: "Invalid tournament_id" }).code(400);
             }
-          }
-          where.Tournament = true;
-          where.Practice = false;
-          question = await QuestionTournament.findAll({
-            where: parsedTournamentId
-              ? { tournament_id: parsedTournamentId }
-              : {},
-            include: [
-              {
-                model: Question,
-                as: "Question",
-                where,
-                attributes: {
-                  exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
-                },
-                include: [
-                  {
-                    model: Category,
-                    as: "Category",
-                    attributes: ["name"],
+            where.Tournament = true;
+            where.Practice = false;
+            question = await QuestionTournament.findAndCountAll({
+              where: { tournament_id: parsedTournamentId },
+              include: [
+                {
+                  model: Question,
+                  as: "Question",
+                  where,
+                  attributes: {
+                    exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
                   },
-                ],
+                  include: [
+                    {
+                      model: Category,
+                      as: "Category",
+                      attributes: ["name"],
+                    },
+                  ],
+                },
+              ],
+            });
+          } else {
+            where.Tournament = true;
+            where.Practice = false;
+            question = await Question.findAndCountAll({
+              where,
+              limit: limit,
+              offset: offset,
+              order: [
+                ["difficultys_id", "ASC"],
+                ["categories_id", "ASC"],
+                ["id", "ASC"],
+              ],
+              attributes: {
+                exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
               },
-            ],
-          });
+              include: [
+                {
+                  model: Category,
+                  as: "Category",
+                  attributes: ["name"],
+                },
+              ],
+            });
+          }
 
-          mappedData = question.map((q) => ({
-            id: q.Question.id,
-            title: q.Question.title,
-            point: q.Question.point,
-            categories_name: q.Question.Category?.name || null,
-            difficultys_id: q.Question.difficultys_id,
-            author: q.Question.createdBy,
+          mappedData = question.rows.map((q) => ({
+            id: q.id,
+            title: q.title,
+            point: q.point,
+            categories_name: q.Category?.name || null,
+            difficultys_id: q.difficultys_id,
+            author: q.createdBy,
+            mode: "Tournament",
           }));
 
           totalPages = Math.ceil(question.count / limit);
@@ -773,7 +797,7 @@ const questionController = {
         difficultys_id,
         file,
         Practice,
-        Tournament, // array of tournament
+        Tournament,
       } = request.payload;
 
       if (title) {
