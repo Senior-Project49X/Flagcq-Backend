@@ -305,7 +305,6 @@ const questionController = {
             });
 
             return {
-              ...hint.dataValues,
               used: !!hintUsed,
             };
           })
