@@ -305,6 +305,8 @@ const questionController = {
             });
 
             return {
+              id: hint.id,
+              point: hint.point,
               used: !!hintUsed,
             };
           })
