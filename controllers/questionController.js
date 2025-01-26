@@ -238,6 +238,7 @@ const questionController = {
       return h.response({ message: error.message }).code(500);
     }
   },
+
   getQuestionById: async (request, h) => {
     try {
       const questionId = parseInt(request.params.id, 10);
@@ -272,7 +273,7 @@ const questionController = {
           exclude:
             user.role === "Admin"
               ? ["createdAt", "updatedAt"]
-              : ["Answer", "createdAt", "createdBy", "updatedAt", "Practice"],
+              : ["Answer", "createdAt", "updatedAt", "Practice", "Tournament"],
         },
         include: [
           {
@@ -294,6 +295,7 @@ const questionController = {
       });
 
       let hintWithUsed = [];
+      let data = {};
 
       if (HintData) {
         hintWithUsed = await Promise.all(
@@ -314,7 +316,29 @@ const questionController = {
         where: { users_id: user.user_id, question_id: question.id },
       });
 
-      const data = {
+      if (user.role === "Admin") {
+        data = {
+          id: question.id,
+          title: question.title,
+          description: question.Description,
+          point: question.point,
+          categories_name: question.Category?.name || null,
+          difficultys_id: question.difficultys_id,
+          file_path: question.file_path,
+          answer: question.Answer,
+          author: question.createdBy,
+          hint: HintData,
+          mode: question.Practice
+            ? "Practice"
+            : question.Tournament
+            ? "Tournament"
+            : "Unpublished",
+        };
+
+        return h.response(data).code(200);
+      }
+
+      data = {
         id: question.id,
         title: question.title,
         description: question.Description,
@@ -411,7 +435,7 @@ const questionController = {
           if (!tournament_id) {
             return h
               .response({
-                message: "Missing tournament_id or Invalid tournament_id",
+                message: "Missing tournament_id",
               })
               .code(400);
           } else if (tournament_id) {
