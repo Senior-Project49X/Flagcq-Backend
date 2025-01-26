@@ -327,7 +327,7 @@ const questionController = {
           file_path: question.file_path,
           answer: question.Answer,
           author: question.createdBy,
-          hint: HintData,
+          hints: HintData,
           mode: question.Practice
             ? "Practice"
             : question.Tournament
