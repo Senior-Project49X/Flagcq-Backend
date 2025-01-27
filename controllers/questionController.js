@@ -1024,13 +1024,6 @@ const questionController = {
         transaction,
       });
 
-      if (existingHints.length > 0) {
-        await Hint.destroy({
-          where: { question_id: question.id },
-          transaction,
-        });
-      }
-
       const existingHintUsed = await HintUsed.findAll({
         where: { hint_id: { [Op.in]: existingHints.map((item) => item.id) } },
         transaction,
@@ -1038,12 +1031,23 @@ const questionController = {
 
       if (existingHintUsed.length > 0) {
         const UserIds = existingHintUsed.map((item) => item.user_id);
+        const pointsToUpdate = existingHints.reduce(
+          (sum, curr) => sum + curr.point,
+          0
+        );
         await Point.update(
-          { points: sequelize.literal("points + " + item.point) },
+          { points: sequelize.literal(`points +  ${pointsToUpdate}`) },
           { where: { users_id: { [Op.in]: UserIds } }, transaction }
         );
         await HintUsed.destroy({
           where: { hint_id: { [Op.in]: existingHints.map((item) => item.id) } },
+          transaction,
+        });
+      }
+
+      if (existingHints.length > 0) {
+        await Hint.destroy({
+          where: { question_id: question.id },
           transaction,
         });
       }
