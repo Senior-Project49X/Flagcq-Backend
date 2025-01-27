@@ -6,6 +6,13 @@ module.exports = {
       users_id: {
         type: Sequelize.UUID,
         allowNull: false,
+        references: {
+          model: "Users",
+          key: "user_id",
+        },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+        primaryKey: true,
       },
       points: {
         type: Sequelize.INTEGER,
@@ -20,18 +27,6 @@ module.exports = {
         allowNull: false,
         type: Sequelize.DATE,
       },
-    });
-
-    await queryInterface.addConstraint("Points", {
-      fields: ["users_id"],
-      type: "foreign key",
-      name: "FK_Points_users_id",
-      references: {
-        table: "Users",
-        field: "user_id",
-      },
-      onDelete: "CASCADE",
-      onUpdate: "CASCADE",
     });
 
     await queryInterface.addIndex("Points", ["users_id"], {
