@@ -2,6 +2,7 @@ const db = require("../models");
 const { Team, Users_Team, TeamScores, User, TournamentPoints, Tournament } = db;
 const { Op } = require("sequelize");
 const jwt = require("jsonwebtoken");
+const moment = require('moment-timezone');
 
 const tournamentController = {
   createTournament: async (req, h) => {
@@ -25,11 +26,11 @@ const tournamentController = {
           .code(400);
       }
 
-      // Convert dates to Date objects for comparison
-      const enrollStart = new Date(enroll_startDate);
-      const enrollEnd = new Date(enroll_endDate);
-      const eventStart = new Date(event_startDate);
-      const eventEnd = new Date(event_endDate);
+      // Convert to UTC from a specific timezone like 'Asia/Bangkok'
+      const enrollStart = moment.tz(enroll_startDate, 'Asia/Bangkok').utc().toDate();
+      const enrollEnd = moment.tz(enroll_endDate, 'Asia/Bangkok').utc().toDate();
+      const eventStart = moment.tz(event_startDate, 'Asia/Bangkok').utc().toDate();
+      const eventEnd = moment.tz(event_endDate, 'Asia/Bangkok').utc().toDate();
 
       // Validate date sequence
       if (enrollStart >= enrollEnd) {
@@ -85,9 +86,6 @@ const tournamentController = {
 
   getAllTournaments: async (req, h) => {
     try {
-      // const tournaments = await Tournament.findAll();
-      // return h.response(tournaments).code(200);
-
       const { page = 1 } = req.query;
       const token = req.state["cmu-oauth-token"];
       if (!token) {
@@ -128,20 +126,6 @@ const tournamentController = {
       const limit = 4; // Number of tournaments per page
       const offset = (parsedPage - 1) * limit;
 
-      // Fetch all tournaments
-      // const tournaments = await Tournament.findAll({
-      //   include: {
-      //     model: Team,
-      //     attributes: ['id', 'tournament_id'],
-      //     include: {
-      //       model: Users_Team,
-      //       where: { users_id: userId },
-      //       attributes: ['team_id'],
-      //       as: "usersTeams",
-      //       required: false, // Include tournaments even if the user isn't on a team
-      //     },
-      //   },
-      // });
       const { count, rows: tournaments } = await Tournament.findAndCountAll({
         include: {
           model: Team,
@@ -156,6 +140,7 @@ const tournamentController = {
         },
         limit,
         offset,
+        order: [['createdAt', 'DESC']],
       });
 
       // Construct the response
@@ -174,7 +159,7 @@ const tournamentController = {
           event_endDate: tournament.event_endDate,
           createdAt: tournament.createdAt,
           updatedAt: tournament.updatedAt,
-          hasJoined: !!userTeam, //not work
+          hasJoined: !!userTeam,
           teamId: userTeam ? userTeam.id : null,
           teamCount: tournament.Teams ? tournament.Teams.length : 0,
         };
@@ -362,6 +347,80 @@ const tournamentController = {
           error: error.message,
         })
         .code(500);
+    }
+  },
+
+  getAllInfoInTournament: async (req, h) => {
+    try {
+      const { tournament_id } = req.params;
+  
+      if (!tournament_id) {
+        return h.response({ message: "Tournament ID is required." }).code(400);
+      }
+  
+      // Fetch teams with their scores and members
+      const teams = await Team.findAll({
+        where: { tournament_id },
+        attributes: ['id', 'name'],
+        include: [
+          {
+            model: TeamScores,
+            attributes: ['team_id', 'total_points'],
+            where: { tournament_id },
+            required: true,
+          },
+          {
+            model: Users_Team,
+            as: 'usersTeams',
+            include: [
+              {
+                model: User,
+                as: 'user',
+                attributes: ['user_id', 'first_name', 'last_name'],
+                include: [
+                  {
+                    model: TournamentPoints,
+                    as: 'tournamentPoints',
+                    where: { tournament_id },
+                    attributes: ['points'],
+                    required: false,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+      // console.log(teams);
+  
+      // Map and structure the response
+    const response = teams.map((team) => {
+      // Assuming each team will have only one TeamScores record associated with it
+      const totalPoints = team.TeamScores[0]?.total_points || 0;
+  
+        const members = team.usersTeams.map((member, index) => ({
+          userId: member.user.user_id,
+          isLeader: index === 0,
+          firstName: member.user.first_name,
+          lastName: member.user.last_name,
+          individualScore: member.user.tournamentPoints[0]?.points || 0,
+        }));
+  
+        return {
+          teamID: team.id,
+          teamName: team.name,
+          totalPoints,
+          members,
+        };
+      });
+  
+      return h.response(response).code(200);
+    } catch (error) {
+      console.error("Error retrieving teams:", error.message);
+      return h.response({
+        message: "Failed to retrieve team information.",
+        error: error.message,
+      }).code(500);
     }
   },
 };

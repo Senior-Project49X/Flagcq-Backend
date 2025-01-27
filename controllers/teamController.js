@@ -546,43 +546,6 @@ const teamController = {
     }
   },
 
-  getAllTeamsInTournament: async (req, h) => {
-    try {
-      const { tournament_id } = req.params;
-
-      if (!tournament_id) {
-        return h.response({ message: "Tournament ID is required." }).code(400);
-      }
-
-      // Fetch all teams for the tournament
-      const teams = await Team.findAll({
-        where: { tournament_id },
-        // include: [
-        //   {
-        //     model: Users_Team,
-        //     as: 'usersTeams', // Make sure this alias matches your Sequelize associations
-        //     include: [
-        //       {
-        //         model: User,
-        //         as: 'user', // Make sure this alias matches your Sequelize associations
-        //         attributes: ['first_name', 'last_name'], // Only include necessary fields
-        //       }
-        //     ]
-        //   }
-        // ]
-      });
-
-      return h.response(teams).code(200);
-    } catch (error) {
-      console.error("Error retrieving teams:", error.message);
-      return h
-        .response({
-          message: "Failed to retrieve teams.",
-          error: error.message,
-        })
-        .code(500);
-    }
-  },
 
   deleteTeam: async (req, h) => {
     try {
@@ -807,6 +770,15 @@ const teamController = {
       const teamId = req.params.team_id;
       const memberIdToKick = req.params.member_id;
 
+      // Check if the team exists
+      const teamExists = await Team.findOne({
+        where: { id: teamId },
+      });
+
+      if (!teamExists) {
+        return h.response({ message: "Team not found." }).code(404);
+      }
+
       // Check if the user is the leader of the team
       const leaderRecord = await Users_Team.findOne({
         where: { team_id: teamId },
@@ -834,10 +806,28 @@ const teamController = {
           .code(404);
       }
 
+      // Retrieve tournament_id using team_id
+      const team = await Team.findOne({
+        where: { id: teamId },
+        attributes: ['tournament_id'],
+      });
+
+      if (!team) {
+        return h.response({ message: 'Team not found.' }).code(404);
+      }
+
+      const tournamentId = team.tournament_id;
+
       // Kick the member from the team
       await Users_Team.destroy({
         where: { team_id: teamId, users_id: memberIdToKick },
       });
+
+      // Remove user's tournament points
+      await TournamentPoints.destroy({
+        where: { tournament_id: tournamentId, users_id: memberIdToKick },
+      });
+      
 
       return h
         .response({ message: "Member successfully kicked from the team." })
@@ -850,6 +840,91 @@ const teamController = {
           error: error.message,
         })
         .code(500);
+    }
+  },
+
+  leaveTeam: async (req, h) => {
+    try {
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized: No token provided." }).code(401);
+      }
+  
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+  
+      // Find the user initiating the leave
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [
+            { student_id: decoded.student_id },
+            { itaccount: decoded.email },
+          ],
+        },
+      });
+  
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+  
+      const userId = user.user_id;
+      // const userId = "c08006fd-cb36-425c-8bc0-56d5e3a2b5d7";
+      const teamId = req.params.team_id;
+
+      // Retrieve tournament_id using team_id
+      const team = await Team.findOne({
+        where: { id: teamId },
+        attributes: ['tournament_id'],
+      });
+
+      if (!team) {
+        return h.response({ message: 'Team not found.' }).code(404);
+      }
+
+      const tournamentId = team.tournament_id;
+  
+      // Check if the user is part of the team
+      const memberRecord = await Users_Team.findOne({
+        where: { team_id: teamId, users_id: userId },
+      });
+  
+      if (!memberRecord) {
+        return h.response({
+          message: "You are not a member of this team.",
+        }).code(403);
+      }
+  
+      // Check if the user is the leader of the team
+      const leaderRecord = await Users_Team.findOne({
+        where: { team_id: teamId },
+        order: [["createdAt", "ASC"]],
+      });
+  
+      if (leaderRecord && leaderRecord.users_id === userId) {
+        return h.response({
+          message: "Unauthorized: Team leaders cannot leave their own team. Assign a new leader first.",
+        }).code(403);
+      }
+  
+      // Remove user from Users_Team
+      await Users_Team.destroy({
+        where: { team_id: teamId, users_id: userId },
+      });
+  
+      // Remove user's tournament points
+      await TournamentPoints.destroy({
+        where: { tournament_id: tournamentId, users_id: userId },
+      });
+  
+      return h.response({ message: "Successfully left the team." }).code(200);
+    } catch (error) {
+      console.error("Error leaving team:", error);
+      return h.response({
+        message: "Failed to leave team",
+        error: error.message,
+      }).code(500);
     }
   },
 };

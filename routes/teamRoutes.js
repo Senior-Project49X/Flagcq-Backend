@@ -12,15 +12,6 @@ const teamRoutes = [
     path: "/teams/create",
     handler: teamController.createTeam,
   },{
-    method: "GET",
-    path: "/teams/tournament/{tournament_id}",
-    handler: teamController.getAllTeamsInTournament,
-    options: {
-      description: "Get all teams in a specific tournament",
-      notes: "Returns all teams with their members for a given tournament ID.",
-      tags: ["api", "teams"],
-    },
-  },{
     // for test
     method: "POST",
     path: "/teams/createmock",
@@ -61,6 +52,10 @@ const teamRoutes = [
       notes: 'Allows the team leader to kick a member from the team.',
       tags: ['api', 'team'], // Tags for documentation plugins
     },
+  },{
+    method: 'DELETE',
+    path: '/teams/{team_id}/leave',
+    handler: teamController.leaveTeam,
   },
 ];
 

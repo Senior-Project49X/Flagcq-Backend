@@ -56,6 +56,15 @@ const tournamentRoutes = [
       notes: "Returns a list of all tournaments.",
       tags: ["api", "tournaments"],
     },
+  },{
+    method: "GET",
+    path: "/api/info/{tournament_id}",
+    handler: tournamentController.getAllInfoInTournament,
+    options: {
+      description: "Get all teams information in a specific tournament",
+      notes: "Returns all teams with their members for a given tournament ID.",
+      tags: ["api", "teams"],
+    },
   },
   {
     method: "GET",
@@ -80,7 +89,7 @@ const tournamentRoutes = [
           }),
         }),
       },
-      description: "Get a tournament details by ID",
+      description: "Get a tournament details of that User by tourID",
       notes: "Returns details of a tournament by its ID.",
       tags: ["api", "tournaments"],
     },
