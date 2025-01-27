@@ -60,6 +60,9 @@ const questionController = {
         return h.response({ message: "Missing required fields" }).code(400);
       }
 
+      const trimmedTitle = title.trim();
+      const trimmedAnswer = Answer.trim();
+
       if (!validDifficulties.includes(difficultys_id)) {
         return h
           .response({ message: "Invalid difficulty parameter" })
@@ -91,7 +94,7 @@ const questionController = {
       }
 
       const existingTitle = await Question.findOne({
-        where: { title },
+        where: { title: trimmedTitle },
       });
 
       if (existingTitle) {
@@ -178,9 +181,9 @@ const questionController = {
       const question = await Question.create(
         {
           categories_id: category.id,
-          title,
+          title: trimmedTitle,
           Description,
-          Answer,
+          Answer: trimmedAnswer,
           point: parsedPoint,
           difficultys_id,
           file_path,
@@ -809,9 +812,38 @@ const questionController = {
         return h.response({ message: "Invalid token" }).code(401);
       }
 
-      const question = await Question.findByPk(questionId);
-      if (!question) {
-        return h.response({ message: "Question not found" }).code(404);
+      const user = await User.findOne({
+        where: { itaccount: decoded.email },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      if (user.role !== "Admin") {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const existingSubmission = await Submited.findOne({
+        where: { question_id: questionId },
+      });
+
+      const existingHintUsed = await HintUsed.findOne({
+        where: { question_id: questionId },
+      });
+
+      const existingTournamentSubmited = await TournamentSubmited.findOne({
+        where: { question_id: questionId },
+      });
+
+      if (
+        existingSubmission ||
+        existingHintUsed ||
+        existingTournamentSubmited
+      ) {
+        return h
+          .response({ message: "Question has been submitted, cannot update" })
+          .code(400);
       }
 
       const {
@@ -824,16 +856,30 @@ const questionController = {
         file,
         Practice,
         Tournament,
+        Hints,
       } = request.payload;
 
+      let ArrayHint;
+      try {
+        ArrayHint = JSON.parse(Hints);
+      } catch (error) {
+        return h.response({ message: "Invalid Hints format" }).code(400);
+      }
+
+      const question = await Question.findByPk(questionId);
+      if (!question) {
+        return h.response({ message: "Question not found" }).code(404);
+      }
+
       if (title) {
+        const trimmedTitle = title.trim();
         const existingTitle = await Question.findOne({
-          where: { title, id: { [Op.ne]: questionId } },
+          where: { title: trimmedTitle },
         });
         if (existingTitle) {
           return h.response({ message: "Title already exists" }).code(409);
         }
-        question.title = title;
+        question.title = trimmedTitle;
       }
 
       if (file?.filename) {
@@ -890,7 +936,11 @@ const questionController = {
       }
 
       if (Description) question.Description = Description;
-      if (Answer) question.Answer = Answer;
+      if (Answer) {
+        const trimmedAnswer = Answer.trim();
+        question.Answer = trimmedAnswer;
+      }
+
       if (point) {
         const parsedPoint = parseInt(point, 10);
         if (isNaN(parsedPoint) || parsedPoint <= 0) {
@@ -899,49 +949,85 @@ const questionController = {
         question.point = parsedPoint;
       }
 
-      if (Practice !== "true" && Practice !== "false") {
-        return h.response({ message: "Invalid value for Practice" }).code(400);
-      }
+      if (ArrayHint && ArrayHint.length > 0 && ArrayHint.length <= 3) {
+        const hasInvalidHint = ArrayHint.some(
+          (hint) =>
+            !hint.detail ||
+            hint.penalty === undefined ||
+            hint.penalty === null ||
+            hint.penalty < 0 ||
+            isNaN(hint.penalty)
+        );
 
-      let isPractice = Practice === "true";
+        if (hasInvalidHint) {
+          throw new Error(
+            "Invalid hint format. Hint must have detail and penalty"
+          );
+        }
 
-      if (isPractice === true) {
-        await QuestionTournament.destroy({
-          where: { questions_id: question.id },
+        const newHints = ArrayHint.map((hint) => ({
+          question_id: question.id,
+          Description: hint.detail,
+          point: hint.penalty,
+        }));
+
+        const totalPenalty = newHints.reduce((sum, curr) => {
+          const point = parseInt(curr.point, 10);
+          if (isNaN(point)) {
+            throw new Error(`Invalid penalty format: ${curr.point}`);
+          }
+          return sum + point;
+        }, 0);
+
+        if (totalPenalty > question.point) {
+          throw new Error("Total penalty exceeds point");
+        }
+
+        await Hint.destroy({
+          where: { question_id: question.id },
           transaction,
         });
-        question.Practice = true;
-      } else if (isPractice === false) {
-        const ArrayTournament = JSON.parse(Tournament);
 
-        if (ArrayTournament && ArrayTournament.length > 0) {
-          await QuestionTournament.destroy({
-            where: { questions_id: question.id },
-            transaction,
-          });
+        await Hint.bulkCreate(newHints, { transaction });
+      }
 
-          const validTournament = await Tournaments.findAll({
-            where: { name: { [Op.in]: Tournament } },
-            attributes: ["id"],
-            transaction,
-          });
+      const QuestionInTournament = await QuestionTournament.findOne({
+        where: { question_id: question.id },
+      });
 
-          if (validTournament.length !== Tournament.length) {
-            return h
-              .response({ message: "Some tournaments are invalid" })
-              .code(400);
-          }
+      if (QuestionInTournament) {
+        return h
+          .response({ message: "Question in tournament cannot be updated" })
+          .code(400);
+      }
 
+      if (Practice) {
+        if (Practice !== "true" && Practice !== "false") {
+          return h
+            .response({ message: "Invalid value for Practice" })
+            .code(400);
+        } else if (Practice === "true") {
+          question.Practice = true;
+          question.Tournament = false;
+        } else if (Practice === "true" && Tournament === "true") {
+          return h
+            .response({ message: "Invalid value for Practice and Tournament" })
+            .code(400);
+        }
+      }
+
+      if (Tournament) {
+        if (Tournament !== "true" && Tournament !== "false") {
+          return h
+            .response({ message: "Invalid value for Tournament" })
+            .code(400);
+        } else if (Tournament === "true") {
           question.Practice = false;
-
-          const newQuestionTournament = validTournament.map((tournament) => ({
-            questions_id: question.id,
-            tournament_id: tournament.id,
-          }));
-
-          await QuestionTournament.bulkCreate(newQuestionTournament, {
-            transaction,
-          });
+          question.Tournament = true;
+        } else if (Tournament === "true" && Practice === "true") {
+          return h
+            .response({ message: "Invalid value for Practice and Tournament" })
+            .code(400);
         }
       }
 
