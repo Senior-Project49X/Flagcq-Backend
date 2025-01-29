@@ -824,28 +824,6 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const existingSubmission = await Submited.findOne({
-        where: { question_id: questionId },
-      });
-
-      const existingHintUsed = await HintUsed.findOne({
-        where: { question_id: questionId },
-      });
-
-      const existingTournamentSubmited = await TournamentSubmited.findOne({
-        where: { question_id: questionId },
-      });
-
-      if (
-        existingSubmission ||
-        existingHintUsed ||
-        existingTournamentSubmited
-      ) {
-        return h
-          .response({ message: "Question has been submitted, cannot update" })
-          .code(400);
-      }
-
       const {
         categories_id,
         title,
@@ -857,6 +835,7 @@ const questionController = {
         Practice,
         Tournament,
         Hints,
+        isFileEdited,
       } = request.payload;
 
       let ArrayHint;
@@ -871,10 +850,48 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
+      if (isFileEdited !== "true" && isFileEdited !== "false") {
+        return h
+          .response({ message: "Invalid value for isFileEdited" })
+          .code(400);
+      }
+
+      const existingSubmission = await Submited.findOne({
+        where: { question_id: questionId },
+      });
+      if (existingSubmission) {
+        return h
+          .response({ message: "Question has been submitted, cannot update" })
+          .code(400);
+      }
+
+      const existingHint = await Hint.findAll({
+        where: { question_id: questionId },
+      });
+      if (existingHint.length > 0) {
+        const existingHintUsed = await HintUsed.findAll({
+          where: { hint_id: { [Op.in]: existingHint.map((item) => item.id) } },
+        });
+        if (existingHintUsed.length > 0) {
+          return h
+            .response({ message: "Question has been used, cannot update" })
+            .code(400);
+        }
+      }
+
+      const existingTournament = await QuestionTournament.findOne({
+        where: { questions_id: questionId },
+      });
+      if (existingTournament) {
+        return h
+          .response({ message: "Question in tournament cannot be updated" })
+          .code(400);
+      }
+
       if (title) {
         const trimmedTitle = title.trim();
         const existingTitle = await Question.findOne({
-          where: { title: trimmedTitle },
+          where: { title: trimmedTitle, id: { [Op.ne]: questionId } },
         });
         if (existingTitle) {
           return h.response({ message: "Title already exists" }).code(409);
@@ -882,16 +899,27 @@ const questionController = {
         question.title = trimmedTitle;
       }
 
+      let file_path = question.file_path;
+
       if (file?.filename) {
         const existingFile = await Question.findOne({
-          where: { file_path: file.filename },
+          where: { file_path: file.filename, id: { [Op.ne]: questionId } },
         });
         if (existingFile) {
           return h.response({ message: "File already exists" }).code(409);
         }
+      } else if (isFileEdited && !file?.filename) {
+        try {
+          fs.unlinkSync(
+            path.join(__dirname, "..", "uploads", question.file_path)
+          );
+        } catch (err) {
+          console.warn("Failed to delete old file:", err);
+        }
+
+        file_path = null;
       }
 
-      let file_path = question.file_path;
       if (file?.filename && file?.path) {
         if (question.file_path) {
           try {
@@ -989,16 +1017,6 @@ const questionController = {
         });
 
         await Hint.bulkCreate(newHints, { transaction });
-      }
-
-      const QuestionInTournament = await QuestionTournament.findOne({
-        where: { question_id: question.id },
-      });
-
-      if (QuestionInTournament) {
-        return h
-          .response({ message: "Question in tournament cannot be updated" })
-          .code(400);
       }
 
       if (Practice) {
