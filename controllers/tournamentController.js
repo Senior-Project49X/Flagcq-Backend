@@ -265,7 +265,12 @@ const tournamentController = {
       }
 
       if (user.role === "Admin") {
-        return h.response({ tournament }).code(200);
+        return h
+          .response({
+            eventEndDate: tournament.eventEndDate,
+            name: tournament.name,
+          })
+          .code(200);
       }
 
       // Individual score (example query from TournamentPoints)
