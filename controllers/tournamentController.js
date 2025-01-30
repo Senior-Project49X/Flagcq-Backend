@@ -1,6 +1,6 @@
 const db = require("../models");
 const { Team, Users_Team, TeamScores, User, TournamentPoints, Tournament } = db;
-const { Op } = require("sequelize");
+const { Op, where } = require("sequelize");
 const jwt = require("jsonwebtoken");
 const moment = require("moment-timezone");
 
@@ -254,14 +254,18 @@ const tournamentController = {
       const id = req.params.tournament_id;
 
       // Find tournament details
-      const tournament = await Tournament.findByPk(id);
+      const tournament = await Tournament.findByPk(id, {
+        attributes: {
+          exclude: ["createdAt", "updatedAt"],
+        },
+      });
 
       if (!tournament) {
         return h.response({ message: "Tournament not found" }).code(404);
       }
 
-      if (user.role === "admin") {
-        return h.response({ message: "ok" }).code(200);
+      if (user.role === "Admin") {
+        return h.response({ tournament }).code(200);
       }
 
       // Individual score (example query from TournamentPoints)
