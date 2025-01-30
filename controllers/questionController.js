@@ -11,6 +11,7 @@ const Point = db.Point;
 const Category = db.Category;
 const sequelize = db.sequelize;
 const { Op } = require("sequelize");
+const { request } = require("http");
 const Tournaments = db.Tournament;
 const QuestionTournament = db.QuestionTournament;
 const TournamentSubmited = db.TournamentSubmited;
@@ -238,6 +239,175 @@ const questionController = {
         await transaction.rollback();
       }
       console.error("Error creating question:", error);
+      return h.response({ message: error.message }).code(500);
+    }
+  },
+
+  addQuestionToTournament: async (request, h) => {
+    const transaction = await sequelize.transaction();
+    try {
+      const {
+        question_id, // Array of question IDs
+        tournament_id,
+      } = request.payload;
+
+      let ArrayQuestionId;
+      try {
+        ArrayQuestionId = JSON.parse(question_id);
+      } catch (error) {
+        return h.response({ message: "Invalid question_id format" }).code(400);
+      }
+
+      if (
+        !ArrayQuestionId ||
+        ArrayQuestionId.length === 0 ||
+        !ArrayQuestionId.every((id) => {
+          const parsedId = parseInt(id, 10);
+          return !isNaN(parsedId) && parsedId > 0;
+        })
+      ) {
+        return h
+          .response({ message: "Missing or invalid question_id" })
+          .code(400);
+      }
+
+      const parsedTournamentId = parseInt(tournament_id, 10);
+      if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
+        return h.response({ message: "Invalid tournament_id" }).code(400);
+      }
+
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: { itaccount: decoded.email },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      if (user.role !== "Admin") {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const tournament = await Tournaments.findByPk(parsedTournamentId, {
+        transaction,
+      });
+
+      if (!tournament) {
+        return h.response({ message: "Tournament not found" }).code(404);
+      }
+
+      const questions = await Question.findAll({
+        where: { id: { [Op.in]: ArrayQuestionId } },
+        transaction,
+      });
+
+      if (questions.length !== ArrayQuestionId.length) {
+        return h.response({ message: "Question not found" }).code(404);
+      }
+
+      const existingQuestions = await QuestionTournament.findAll({
+        where: { questions_id: { [Op.in]: ArrayQuestionId } },
+        transaction,
+      });
+
+      if (existingQuestions.length > 0) {
+        return h
+          .response({ message: "Question already in tournament" })
+          .code(409);
+      }
+
+      const newQuestions = questions.map((question) => ({
+        tournament_id: parsedTournamentId,
+        questions_id: question.id,
+      }));
+
+      await QuestionTournament.bulkCreate(newQuestions, { transaction });
+
+      await transaction.commit();
+      return h.response({ message: "Question added to tournament" }).code(201);
+    } catch (error) {
+      if (transaction) {
+        await transaction.rollback();
+      }
+      console.error("Error adding question to tournament:", error);
+      return h.response({ message: error.message }).code(500);
+    }
+  },
+
+  deleteQuestionFromTournament: async (request, h) => {
+    const transaction = await sequelize.transaction();
+    try {
+      const questionIds = request.params.id;
+      if (!questionIds) {
+        return h.response({ message: "Missing question_id" }).code(400);
+      }
+
+      const ArrayQuestionId = questionIds
+        .split(",")
+        .map((id) => parseInt(id, 10));
+      if (ArrayQuestionId.some((id) => isNaN(id) || id <= 0)) {
+        return h.response({ message: "Invalid question_id" }).code(400);
+      }
+
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: { itaccount: decoded.email },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      if (user.role !== "Admin") {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const questions = await QuestionTournament.findAll({
+        where: { questions_id: { [Op.in]: ArrayQuestionId } },
+        transaction,
+      });
+
+      if (questions.length !== ArrayQuestionId.length) {
+        return h.response({ message: "Question not found" }).code(404);
+      }
+
+      await QuestionTournament.destroy({
+        where: { questions_id: { [Op.in]: ArrayQuestionId } },
+        transaction,
+      });
+
+      await transaction.commit();
+      return h
+        .response({ message: "Question removed from tournament" })
+        .code(200);
+    } catch (error) {
+      if (transaction) {
+        await transaction.rollback();
+      }
+      console.error("Error deleting question from tournament:", error);
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -908,7 +1078,7 @@ const questionController = {
         if (existingFile) {
           return h.response({ message: "File already exists" }).code(409);
         }
-      } else if (isFileEdited && !file?.filename) {
+      } else if (isFileEdited === "true" && !file?.filename) {
         try {
           fs.unlinkSync(
             path.join(__dirname, "..", "uploads", question.file_path)

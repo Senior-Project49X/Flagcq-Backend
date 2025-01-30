@@ -1,5 +1,4 @@
 "use strict";
-const path = require("path");
 const questionController = require("../controllers/questionController");
 const questionRoute = [
   {
@@ -73,6 +72,16 @@ const questionRoute = [
     method: "GET",
     path: "/api/question/usehint/{id}",
     handler: questionController.UseHint,
+  },
+  {
+    method: "POST",
+    path: "/api/questions/tournament",
+    handler: questionController.addQuestionToTournament,
+  },
+  {
+    method: "DELETE",
+    path: "/api/questions/tournament/{id}",
+    handler: questionController.deleteQuestionFromTournament,
   },
 ];
 
