@@ -3,6 +3,7 @@ const { Team, Users_Team, TeamScores, User, TournamentPoints, Tournament } = db;
 const { Op, where } = require("sequelize");
 const jwt = require("jsonwebtoken");
 const moment = require("moment-timezone");
+const { get } = require("http");
 
 const tournamentController = {
   createTournament: async (req, h) => {
@@ -442,6 +443,49 @@ const tournamentController = {
       return h
         .response({
           message: "Failed to retrieve team information.",
+          error: error.message,
+        })
+        .code(500);
+    }
+  },
+
+  getAllTournamentList: async (req, h) => {
+    try {
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized " }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: {
+          itaccount: decoded.email,
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+
+      if (user.role !== "Admin") {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const tournaments = await Tournament.findAll({
+        attributes: ["id", "name", "event_endDate"],
+        order: [["id", "DESC"]],
+      });
+
+      return h.response(tournaments).code(200);
+    } catch (error) {
+      console.error("Error fetching tournaments:", error);
+      return h
+        .response({
+          message: "Failed to get tournaments",
           error: error.message,
         })
         .code(500);
