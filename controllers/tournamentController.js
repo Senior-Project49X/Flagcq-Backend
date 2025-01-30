@@ -267,7 +267,7 @@ const tournamentController = {
       if (user.role === "Admin") {
         return h
           .response({
-            eventEndDate: tournament.eventEndDate,
+            eventEndDate: tournament.event_endDate,
             name: tournament.name,
           })
           .code(200);
