@@ -2,6 +2,7 @@
 
 const Joi = require("joi");
 const tournamentController = require("../controllers/tournamentController");
+const path = require("path");
 
 const tournamentRoutes = [
   {
@@ -56,7 +57,8 @@ const tournamentRoutes = [
       notes: "Returns a list of all tournaments.",
       tags: ["api", "tournaments"],
     },
-  },{
+  },
+  {
     method: "GET",
     path: "/api/info/{tournament_id}",
     handler: tournamentController.getAllInfoInTournament,
@@ -111,6 +113,11 @@ const tournamentRoutes = [
       notes: "Deletes a tournament and all related data by its ID.",
       tags: ["api", "tournaments"],
     },
+  },
+  {
+    method: "GET",
+    path: "/api/tournaments/list",
+    handler: tournamentController.getAllTournamentList,
   },
 ];
 

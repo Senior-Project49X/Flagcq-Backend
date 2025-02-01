@@ -1,8 +1,9 @@
 const db = require("../models");
 const { Team, Users_Team, TeamScores, User, TournamentPoints, Tournament } = db;
-const { Op } = require("sequelize");
+const { Op, where } = require("sequelize");
 const jwt = require("jsonwebtoken");
-const moment = require('moment-timezone');
+const moment = require("moment-timezone");
+const { get } = require("http");
 
 const tournamentController = {
   createTournament: async (req, h) => {
@@ -27,10 +28,19 @@ const tournamentController = {
       }
 
       // Convert to UTC from a specific timezone like 'Asia/Bangkok'
-      const enrollStart = moment.tz(enroll_startDate, 'Asia/Bangkok').utc().toDate();
-      const enrollEnd = moment.tz(enroll_endDate, 'Asia/Bangkok').utc().toDate();
-      const eventStart = moment.tz(event_startDate, 'Asia/Bangkok').utc().toDate();
-      const eventEnd = moment.tz(event_endDate, 'Asia/Bangkok').utc().toDate();
+      const enrollStart = moment
+        .tz(enroll_startDate, "Asia/Bangkok")
+        .utc()
+        .toDate();
+      const enrollEnd = moment
+        .tz(enroll_endDate, "Asia/Bangkok")
+        .utc()
+        .toDate();
+      const eventStart = moment
+        .tz(event_startDate, "Asia/Bangkok")
+        .utc()
+        .toDate();
+      const eventEnd = moment.tz(event_endDate, "Asia/Bangkok").utc().toDate();
 
       // Validate date sequence
       if (enrollStart >= enrollEnd) {
@@ -140,7 +150,7 @@ const tournamentController = {
         },
         limit,
         offset,
-        order: [['createdAt', 'DESC']],
+        order: [["createdAt", "DESC"]],
       });
 
       // Construct the response
@@ -245,10 +255,23 @@ const tournamentController = {
       const id = req.params.tournament_id;
 
       // Find tournament details
-      const tournament = await Tournament.findByPk(id);
+      const tournament = await Tournament.findByPk(id, {
+        attributes: {
+          exclude: ["createdAt", "updatedAt"],
+        },
+      });
 
       if (!tournament) {
         return h.response({ message: "Tournament not found" }).code(404);
+      }
+
+      if (user.role === "Admin") {
+        return h
+          .response({
+            eventEndDate: tournament.event_endDate,
+            name: tournament.name,
+          })
+          .code(200);
       }
 
       // Individual score (example query from TournamentPoints)
@@ -353,36 +376,36 @@ const tournamentController = {
   getAllInfoInTournament: async (req, h) => {
     try {
       const { tournament_id } = req.params;
-  
+
       if (!tournament_id) {
         return h.response({ message: "Tournament ID is required." }).code(400);
       }
-  
+
       // Fetch teams with their scores and members
       const teams = await Team.findAll({
         where: { tournament_id },
-        attributes: ['id', 'name'],
+        attributes: ["id", "name"],
         include: [
           {
             model: TeamScores,
-            attributes: ['team_id', 'total_points'],
+            attributes: ["team_id", "total_points"],
             where: { tournament_id },
             required: true,
           },
           {
             model: Users_Team,
-            as: 'usersTeams',
+            as: "usersTeams",
             include: [
               {
                 model: User,
-                as: 'user',
-                attributes: ['user_id', 'first_name', 'last_name'],
+                as: "user",
+                attributes: ["user_id", "first_name", "last_name"],
                 include: [
                   {
                     model: TournamentPoints,
-                    as: 'tournamentPoints',
+                    as: "tournamentPoints",
                     where: { tournament_id },
-                    attributes: ['points'],
+                    attributes: ["points"],
                     required: false,
                   },
                 ],
@@ -392,12 +415,12 @@ const tournamentController = {
         ],
       });
       // console.log(teams);
-  
+
       // Map and structure the response
-    const response = teams.map((team) => {
-      // Assuming each team will have only one TeamScores record associated with it
-      const totalPoints = team.TeamScores[0]?.total_points || 0;
-  
+      const response = teams.map((team) => {
+        // Assuming each team will have only one TeamScores record associated with it
+        const totalPoints = team.TeamScores[0]?.total_points || 0;
+
         const members = team.usersTeams.map((member, index) => ({
           userId: member.user.user_id,
           isLeader: index === 0,
@@ -405,7 +428,7 @@ const tournamentController = {
           lastName: member.user.last_name,
           individualScore: member.user.tournamentPoints[0]?.points || 0,
         }));
-  
+
         return {
           teamID: team.id,
           teamName: team.name,
@@ -413,14 +436,59 @@ const tournamentController = {
           members,
         };
       });
-  
+
       return h.response(response).code(200);
     } catch (error) {
       console.error("Error retrieving teams:", error.message);
-      return h.response({
-        message: "Failed to retrieve team information.",
-        error: error.message,
-      }).code(500);
+      return h
+        .response({
+          message: "Failed to retrieve team information.",
+          error: error.message,
+        })
+        .code(500);
+    }
+  },
+
+  getAllTournamentList: async (req, h) => {
+    try {
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized " }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: {
+          itaccount: decoded.email,
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+
+      if (user.role !== "Admin") {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const tournaments = await Tournament.findAll({
+        attributes: ["id", "name", "event_endDate"],
+        order: [["id", "DESC"]],
+      });
+
+      return h.response(tournaments).code(200);
+    } catch (error) {
+      console.error("Error fetching tournaments:", error);
+      return h
+        .response({
+          message: "Failed to get tournaments",
+          error: error.message,
+        })
+        .code(500);
     }
   },
 };
