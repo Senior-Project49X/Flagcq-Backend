@@ -4,8 +4,6 @@ const db = require("../models");
 const sequelize = db.sequelize;
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
-const { Op } = require("sequelize");
-const { it } = require("node:test");
 const User = db.User;
 const Point = db.Point;
 
@@ -19,17 +17,18 @@ const usersController = {
 
       const accessToken = await getAccessToken(authorizationCode);
       if (!accessToken) {
-        return h.response({ message: "Invalid authorization code" }).code(400);
+        return h
+          .response({ message: "Cannot get EntraID access token" })
+          .code(400);
       }
 
       const userInfo = await getUserInfo(accessToken);
       if (!userInfo) {
-        return h.response({ message: "Invalid access token" }).code(400);
+        return h.response({ message: "Cannot get cmu basic info" }).code(400);
       }
 
       let user = await User.findOne({
         where: {
-          student_id: userInfo.student_id || null,
           itaccount: userInfo.cmuitaccount,
         },
       });
@@ -80,6 +79,7 @@ const usersController = {
         isHttpOnly: true,
         path: "/",
         samesite: "Lax",
+        domain: "localhost",
       });
 
       return h.response({ message: "Login successful", token }).code(200);
@@ -334,16 +334,17 @@ const usersController = {
 async function getAccessToken(authorizationCode) {
   try {
     const response = await axios.post(
-      process.env.CMU_OAUTH_GET_TOKEN_URL,
-      {},
+      process.env.CMU_ENTRAID_GET_TOKEN_URL,
+
       {
-        params: {
-          code: authorizationCode,
-          redirect_uri: process.env.CMU_OAUTH_REDIRECT_URL,
-          client_id: process.env.CMU_OAUTH_CLIENT_ID,
-          client_secret: process.env.CMU_OAUTH_CLIENT_SECRET,
-          grant_type: "authorization_code",
-        },
+        code: authorizationCode,
+        redirect_uri: process.env.CMU_ENTRAID_REDIRECT_URL,
+        client_id: process.env.CMU_ENTRAID_CLIENT_ID,
+        client_secret: process.env.CMU_ENTRAID_CLIENT_SECRET,
+        scope: process.env.SCOPE,
+        grant_type: "authorization_code",
+      },
+      {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
@@ -358,7 +359,7 @@ async function getAccessToken(authorizationCode) {
 
 async function getUserInfo(accessToken) {
   try {
-    const response = await axios.get(process.env.CMU_OAUTH_GET_BASIC_INFO, {
+    const response = await axios.get(process.env.CMU_ENTRAID_GET_BASIC_INFO, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
