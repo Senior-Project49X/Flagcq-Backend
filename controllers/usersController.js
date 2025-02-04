@@ -283,6 +283,7 @@ const usersController = {
     }
   },
   addRole: async (request, h) => {
+    const transaction = await sequelize.transaction();
     try {
       const token = request.state["cmu-oauth-token"];
       if (!token) {
@@ -296,6 +297,7 @@ const usersController = {
 
       let user = await User.findOne({
         where: { itaccount: decoded.email },
+        transaction,
       });
 
       if (!user) {
@@ -306,28 +308,36 @@ const usersController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const { users } = request.payload;
-      let ArrayUsers = [];
-      try {
-        ArrayUsers = JSON.parse(users);
-        if (ArrayUsers.length === 0) {
-          return h.response({ message: "Empty array received" }).code(200);
-        }
-
-        if (
-          Array.isArray(nestedArrayUsers) &&
-          Array.isArray(nestedArrayUsers[0])
-        ) {
-          return h.response({ message: "Invalid Users format" }).code(400);
-        }
-      } catch (err) {
-        return h.response({ message: "Invalid Users format" }).code(400);
+      const { users, role } = request.payload;
+      if (!users || !role) {
+        await transaction.rollback();
+        return h.response({ message: "Missing users or role" }).code(400);
       }
 
-      return h.response({ message: "Add admin successful" }).code(200);
+      const UserToChange = await User.findOne({
+        where: { [Op.or]: [{ itaccount: users }, { student_id: users }] },
+        transaction,
+      });
+
+      if (!UserToChange) {
+        await transaction.rollback();
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      await User.update(
+        { role: role },
+        {
+          where: { user_id: UserToChange.user_id },
+          transaction,
+        }
+      );
+      await transaction.commit();
+
+      return h.response({ message: "Role changed" }).code(200);
     } catch (err) {
       console.error(err);
-      return h.response({ error: "Add admin failed" }).code(500);
+      await transaction.rollback();
+      return h.response({ error: "Add role failed" }).code(500);
     }
   },
 };
