@@ -823,83 +823,95 @@ const questionController = {
           where.Tournament = false;
         } else if (mode === "Tournament") {
           let parsedTournamentId = null;
-          if (tournament_id) {
-            parsedTournamentId = parseInt(tournament_id, 10);
-            if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
-              return h.response({ message: "Invalid tournament_id" }).code(400);
-            }
-            where.Tournament = true;
-            where.Practice = false;
-            question = await QuestionTournament.findAndCountAll({
-              where: { tournament_id: parsedTournamentId },
-              include: [
-                {
-                  model: Question,
-                  as: "Question",
-                  where,
-                  attributes: {
-                    exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
-                  },
-                  include: [
-                    {
-                      model: Category,
-                      as: "Category",
-                      attributes: ["name"],
+          try {
+            if (tournament_id) {
+              parsedTournamentId = parseInt(tournament_id, 10);
+              if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
+                return h
+                  .response({ message: "Invalid tournament_id" })
+                  .code(400);
+              }
+
+              question = await QuestionTournament.findAndCountAll({
+                where: { tournament_id: parsedTournamentId },
+                include: [
+                  {
+                    model: Question,
+                    as: "Question",
+                    where,
+                    attributes: {
+                      exclude: [
+                        "Answer",
+                        "createdAt",
+                        "createdBy",
+                        "updatedAt",
+                      ],
                     },
-                  ],
+                    include: [
+                      {
+                        model: Category,
+                        as: "Category",
+                        attributes: ["name"],
+                      },
+                    ],
+                  },
+                ],
+              });
+            } else {
+              question = await Question.findAndCountAll({
+                where: {
+                  ...where,
+                  Tournament: true,
+                  Practice: false,
                 },
-              ],
-            });
-          } else {
-            where.Tournament = true;
-            where.Practice = false;
-            question = await Question.findAndCountAll({
-              where,
-              limit: limit,
-              offset: offset,
-              order: [
-                ["difficultys_id", "ASC"],
-                ["categories_id", "ASC"],
-                ["id", "ASC"],
-              ],
-              attributes: {
-                exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
-              },
-              include: [
-                {
-                  model: Category,
-                  as: "Category",
-                  attributes: ["name"],
+                limit: limit,
+                offset: offset,
+                order: [
+                  ["difficultys_id", "ASC"],
+                  ["categories_id", "ASC"],
+                  ["id", "ASC"],
+                ],
+                attributes: {
+                  exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
                 },
-              ],
+                include: [
+                  {
+                    model: Category,
+                    as: "Category",
+                    attributes: ["name"],
+                  },
+                ],
+              });
+            }
+
+            mappedData = question.rows.map((qt) => {
+              const q = qt.Question || qt;
+              return {
+                id: q.id,
+                title: q.title,
+                point: q.point,
+                categories_name: q.Category?.name,
+                difficultys_id: q.difficultys_id,
+                author: q.createdBy,
+                mode: "Tournament",
+              };
             });
+
+            totalPages = Math.ceil(question.count / limit);
+            hasNextPage = parsedPage < totalPages;
+
+            return h
+              .response({
+                data: mappedData,
+                totalItems: mappedData.length,
+                currentPage: parsedPage,
+                totalPages: totalPages,
+                hasNextPage: hasNextPage,
+              })
+              .code(200);
+          } catch (error) {
+            return h.response({ message: error.message }).code(500);
           }
-
-          mappedData = question.rows.map((qt) => {
-            const q = qt.Question;
-            return {
-              id: q.id,
-              title: q.title,
-              point: q.point,
-              categories_name: q.Category?.name,
-              difficultys_id: q.difficultys_id,
-              author: q.createdBy,
-              mode: "Tournament",
-            };
-          });
-
-          totalPages = Math.ceil(question.count / limit);
-          hasNextPage = parsedPage < totalPages;
-
-          return h
-            .response({
-              data: mappedData,
-              totalItems: mappedData.length,
-              currentPage: parsedPage,
-              totalPages: totalPages,
-              hasNextPage: hasNextPage,
-            })
-            .code(200);
         } else if (mode === "Unpublished") {
           where.Practice = false;
           where.Tournament = false;
