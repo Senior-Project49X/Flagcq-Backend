@@ -95,8 +95,9 @@ const usersController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      h.unstate("cmu-oauth-token");
-      return h.redirect("/?message=Logout successful").code(200);
+      h.unstate("cmu-oauth-token", { path: "/login" });
+
+      return h.response({ message: "Logout successful" }).code(200);
     } catch (err) {
       console.error(err);
       return h.response({ error: "Logout failed" }).code(500);
