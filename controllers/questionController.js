@@ -875,15 +875,18 @@ const questionController = {
             });
           }
 
-          mappedData = question.rows.map((q) => ({
-            id: q.id,
-            title: q.title,
-            point: q.point,
-            categories_name: q.Category?.name,
-            difficultys_id: q.difficultys_id,
-            author: q.createdBy,
-            mode: "Tournament",
-          }));
+          mappedData = question.rows.map((qt) => {
+            const q = qt.Question;
+            return {
+              id: q.id,
+              title: q.title,
+              point: q.point,
+              categories_name: q.Category?.name,
+              difficultys_id: q.difficultys_id,
+              author: q.createdBy,
+              mode: "Tournament",
+            };
+          });
 
           totalPages = Math.ceil(question.count / limit);
           hasNextPage = parsedPage < totalPages;
