@@ -97,7 +97,7 @@ const usersController = {
 
       h.unstate("cmu-oauth-token", { path: "/" });
 
-      return h.rediect(process.env.CMU_ENTRAID_LOGOUT_URL);
+      return h.response({ message: "Logout successful" }).code(200);
     } catch (err) {
       console.error(err);
       return h.response({ error: "Logout failed" }).code(500);
