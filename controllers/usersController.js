@@ -74,7 +74,7 @@ const usersController = {
       );
 
       h.state("cmu-oauth-token", token, {
-        ttl: 3600 * 1000,
+        ttl: 84600 * 1000,
         isSecure: process.env.NODE_ENV === "production",
         isHttpOnly: true,
         path: "/",
