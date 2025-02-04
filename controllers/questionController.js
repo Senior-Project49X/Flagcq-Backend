@@ -1091,6 +1091,14 @@ const questionController = {
       }
 
       if (file?.filename && file?.path) {
+        const allowedFileTypes = [
+          "application/x-compressed",
+          "application/x-zip-compressed",
+        ];
+        if (!allowedFileTypes.includes(file.headers["content-type"])) {
+          return h.response({ message: "Invalid file type" }).code(400);
+        }
+
         if (question.file_path) {
           try {
             fs.unlinkSync(
@@ -1101,14 +1109,21 @@ const questionController = {
           }
         }
 
+        const fileName = `${file.filename}`;
         const uploadDirectory = path.join(__dirname, "..", "uploads");
-        if (!fs.existsSync(uploadDirectory)) {
-          fs.mkdirSync(uploadDirectory, { recursive: true });
-        }
+        const filePath = path.join(uploadDirectory, fileName);
 
-        const newFilePath = path.join(uploadDirectory, file.filename);
-        fs.writeFileSync(newFilePath, fs.readFileSync(file.path));
-        file_path = file.filename;
+        try {
+          await fs.promises.mkdir(uploadDirectory, { recursive: true });
+          await fs.promises.writeFile(
+            filePath,
+            await fs.promises.readFile(file.path)
+          );
+          file_path = fileName;
+        } catch (err) {
+          console.error("Error uploading file:", err);
+          return h.response({ message: "Failed to upload file" }).code(500);
+        }
       }
 
       if (categories_id) {
@@ -1355,20 +1370,30 @@ const questionController = {
     }
   },
   checkAnswerPractice: async (request, h) => {
+    const transaction = await sequelize.transaction();
     try {
       const { Answer, id } = request.payload;
-      const question = await Question.findByPk(id);
+
+      const parsedId = parseInt(id, 10);
+      if (isNaN(parsedId) || parsedId <= 0) {
+        return h.response({ message: "Invalid question ID" }).code(400);
+      }
+
+      const question = await Question.findByPk(parsedId, { transaction });
       if (!question) {
+        await transaction.rollback();
         return h.response({ message: "Question not found" }).code(404);
       }
 
       const token = request.state["cmu-oauth-token"];
       if (!token) {
+        await transaction.rollback();
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
       if (!decoded) {
+        await transaction.rollback();
         return h.response({ message: "Invalid token" }).code(401);
       }
 
@@ -1378,17 +1403,21 @@ const questionController = {
           where: {
             itaccount: decoded.email,
           },
+          transaction,
         });
 
         if (!user) {
+          await transaction.rollback();
           return h.response({ message: "User not found" }).code(404);
         }
 
         let point = await Point.findOne({
           where: { users_id: user.user_id },
+          transaction,
         });
 
         if (!point) {
+          await transaction.rollback();
           return h.response({ message: "Point not found" }).code(404);
         }
 
@@ -1397,37 +1426,62 @@ const questionController = {
             users_id: user.user_id,
             question_id: question.id,
           },
+          transaction,
         });
 
         if (existingSubmission) {
+          await transaction.rollback();
           return h
             .response({ message: "Already submitted", solve: true })
             .code(200);
         }
 
-        await Submited.create({
-          users_id: user.user_id,
-          question_id: question.id,
-        });
+        await Submited.create(
+          {
+            users_id: user.user_id,
+            question_id: question.id,
+          },
+          { transaction }
+        );
 
         point.points += question.point;
-        await point.save();
+        await point.save({ transaction });
 
+        await transaction.commit();
         return h.response({ message: "Correct", solve: true }).code(200);
       } else {
+        await transaction.rollback();
         return h.response({ message: "Incorrect", solve: false }).code(200);
       }
     } catch (err) {
       console.error(err);
+      await transaction.rollback();
       return h.response({ message: "Internal Server Error" }).code(500);
     }
   },
+
   checkAnswerTournament: async (request, h) => {
+    const transaction = await sequelize.transaction();
     try {
       const { question_id, tournament_id, Answer, team_id } = request.payload;
 
+      const parsedId = parseInt(question_id, 10);
+      if (isNaN(parsedId) || parsedId <= 0) {
+        return h.response({ message: "Invalid question ID" }).code(400);
+      }
+
+      const teamId = parseInt(team_id, 10);
+      if (isNaN(teamId) || teamId <= 0) {
+        return h.response({ message: "Invalid team ID" }).code(400);
+      }
+
+      const tournamentId = parseInt(tournament_id, 10);
+      if (isNaN(tournamentId) || tournamentId <= 0) {
+        return h.response({ message: "Invalid tournament ID" }).code(400);
+      }
+
       const question = await QuestionTournament.findOne({
-        where: { questions_id: question_id, tournament_id },
+        where: { questions_id: parsedId, tournament_id: tournamentId },
         include: [
           {
             model: Question,
@@ -1435,19 +1489,23 @@ const questionController = {
             attributes: ["Answer"],
           },
         ],
+        transaction,
       });
 
       if (!question) {
+        await transaction.rollback();
         return h.response({ message: "Question not found" }).code(404);
       }
 
       const token = request.state["cmu-oauth-token"];
       if (!token) {
+        await transaction.rollback();
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
       if (!decoded) {
+        await transaction.rollback();
         return h.response({ message: "Invalid token" }).code(401);
       }
 
@@ -1455,61 +1513,81 @@ const questionController = {
         where: {
           itaccount: decoded.email,
         },
+        transaction,
       });
 
       if (!user) {
+        await transaction.rollback();
         return h.response({ message: "User not found" }).code(404);
       }
 
-      const answer = "CTFCQ{" + question.Question.Answer + "}";
+      const answer = question.Question.Answer;
       if (answer === Answer) {
+        if (user.role === "Admin") {
+          await transaction.commit();
+          return h.response({ message: "Correct", solve: true }).code(200);
+        }
+
         let point = await TournamentPoints.findOne({
-          where: { users_id: user.user_id, tournament_id },
+          where: { users_id: user.user_id, tournament_id: tournamentId },
+          transaction,
         });
 
         if (!point) {
+          await transaction.rollback();
           return h.response({ message: "Point not found" }).code(404);
         }
 
         const existingSubmission = await TournamentSubmited.findOne({
           where: {
             question_tournament_id: question.id,
-            team_id,
+            team_id: teamId,
           },
+          transaction,
         });
 
         if (existingSubmission) {
-          return h.response({ message: "Already submitted" }).code(200);
+          await transaction.rollback();
+          return h
+            .response({ message: "Already submitted", solve: true })
+            .code(200);
         }
 
-        await TournamentSubmited.create({
-          users_id: user.user_id,
-          question_tournament_id: question.id,
-          tournament_id,
-          team_id,
-        });
+        await TournamentSubmited.create(
+          {
+            users_id: user.user_id,
+            question_tournament_id: question.id,
+            tournament_id: tournamentId,
+            team_id: teamId,
+          },
+          { transaction }
+        );
 
         point.points += question.Question.point;
-
-        await point.save();
+        await point.save({ transaction });
 
         let teamScore = await TeamScores.findOne({
-          where: { team_id: team_id, tournament_id },
+          where: { team_id: team_id, tournament_id: tournamentId },
+          transaction,
         });
 
         if (!teamScore) {
+          await transaction.rollback();
           return h.response({ message: "Team score not found" }).code(404);
         }
 
         teamScore.total_points += question.Question.point;
-        await teamScore.save();
+        await teamScore.save({ transaction });
 
+        await transaction.commit();
         return h.response({ message: "Correct", solve: true }).code(200);
       } else {
+        await transaction.rollback();
         return h.response({ message: "Incorrect", solve: false }).code(200);
       }
     } catch (err) {
       console.error(err);
+      await transaction.rollback();
       return h.response({ message: "Internal Server Error" }).code(500);
     }
   },

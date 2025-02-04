@@ -6,13 +6,13 @@ const usersController = require("../controllers/usersController");
 const userRoute = [
   {
     method: "POST",
-    path: "/api/oauth-login",
-    handler: usersController.oauthLogin,
+    path: "/api/login",
+    handler: usersController.EntraLogin,
   },
   {
     method: "POST",
-    path: "/api/oauth-logout",
-    handler: usersController.oauthLogout,
+    path: "/api/logout",
+    handler: usersController.EntraLogout,
   },
   {
     method: "GET",

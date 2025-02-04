@@ -8,7 +8,7 @@ const User = db.User;
 const Point = db.Point;
 
 const usersController = {
-  oauthLogin: async (request, h) => {
+  EntraLogin: async (request, h) => {
     try {
       const { authorizationCode } = request.payload;
       if (!authorizationCode) {
@@ -88,7 +88,7 @@ const usersController = {
       return h.response({ error: "Login failed" }).code(500);
     }
   },
-  oauthLogout: async (request, h) => {
+  EntraLogout: async (request, h) => {
     try {
       const token = request.state["cmu-oauth-token"];
       if (!token) {
