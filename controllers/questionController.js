@@ -247,27 +247,27 @@ const questionController = {
     const transaction = await sequelize.transaction();
     try {
       const {
-        question_id, // Array of question IDs
+        question_id, // Array of question_id
         tournament_id,
       } = request.payload;
 
-      let ArrayQuestionId;
-      try {
-        ArrayQuestionId = JSON.parse(question_id);
-      } catch (error) {
-        return h.response({ message: "Invalid question_id format" }).code(400);
+      if (!Array.isArray(question_id)) {
+        return h
+          .response({ message: "question_id must be an array" })
+          .code(400);
       }
 
       if (
-        !ArrayQuestionId ||
-        ArrayQuestionId.length === 0 ||
-        !ArrayQuestionId.every((id) => {
+        question_id.length === 0 ||
+        !question_id.every((id) => {
           const parsedId = parseInt(id, 10);
           return !isNaN(parsedId) && parsedId > 0;
         })
       ) {
         return h
-          .response({ message: "Missing or invalid question_id" })
+          .response({
+            message: "Missing or invalid items in question_id array",
+          })
           .code(400);
       }
 
@@ -309,23 +309,12 @@ const questionController = {
       }
 
       const questions = await Question.findAll({
-        where: { id: { [Op.in]: ArrayQuestionId } },
+        where: { id: { [Op.in]: question_id } },
         transaction,
       });
 
-      if (questions.length !== ArrayQuestionId.length) {
+      if (questions.length !== question_id.length) {
         return h.response({ message: "Question not found" }).code(404);
-      }
-
-      const existingQuestions = await QuestionTournament.findAll({
-        where: { questions_id: { [Op.in]: ArrayQuestionId } },
-        transaction,
-      });
-
-      if (existingQuestions.length > 0) {
-        return h
-          .response({ message: "Question already in tournament" })
-          .code(409);
       }
 
       const newQuestions = questions.map((question) => ({
