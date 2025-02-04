@@ -25,9 +25,9 @@ const userRoute = [
     handler: usersController.testToken,
   },
   {
-    method: "GET",
-    path: "/api/users",
-    handler: usersController.getAllUsers,
+    method: "POST",
+    path: "/api/user/role",
+    handler: usersController.addRole,
   },
 ];
 

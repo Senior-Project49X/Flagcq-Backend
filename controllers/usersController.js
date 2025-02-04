@@ -82,7 +82,7 @@ const usersController = {
         domain: "localhost",
       });
 
-      return h.response({ message: "Login successful", token }).code(200);
+      return h.response({ message: "Login successful" }).code(200);
     } catch (err) {
       console.error(err);
       return h.response({ error: "Login failed" }).code(500);
