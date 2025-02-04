@@ -567,6 +567,7 @@ const questionController = {
       let totalPages = 0;
       let hasNextPage = false;
       let mappedData = [];
+      let TournamentSovledIds = [];
 
       if (category) {
         const validCategory = await Category.findOne({
@@ -609,7 +610,6 @@ const questionController = {
             }
 
             let Userteam = null;
-            let TournamentSovledIds = [];
 
             if (user.role !== "Admin") {
               Userteam = await User_Team.findOne({
@@ -822,7 +822,7 @@ const questionController = {
           where.Practice = true;
           where.Tournament = false;
         } else if (mode === "Tournament") {
-          const parsedTournamentId = null;
+          let parsedTournamentId = null;
           if (tournament_id) {
             parsedTournamentId = parseInt(tournament_id, 10);
             if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
