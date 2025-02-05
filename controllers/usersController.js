@@ -6,6 +6,7 @@ const jwt = require("jsonwebtoken");
 const axios = require("axios");
 const User = db.User;
 const Point = db.Point;
+const { Op } = require("sequelize");
 
 const usersController = {
   EntraLogin: async (request, h) => {
@@ -314,8 +315,24 @@ const usersController = {
         return h.response({ message: "Missing users or role" }).code(400);
       }
 
+      const validRoles = ["Admin", "User"];
+      if (!validRoles.includes(role)) {
+        await transaction.rollback();
+        return h.response({ message: "Invalid role" }).code(400);
+      }
+
+      let userCondition = {};
+      if (typeof users === "string" && users.includes("@")) {
+        userCondition = { itaccount: users };
+      } else if (!isNaN(parseInt(users, 10))) {
+        userCondition = { student_id: parseInt(users, 10) };
+      } else {
+        await transaction.rollback();
+        return h.response({ message: "Invalid users" }).code(400);
+      }
+
       const UserToChange = await User.findOne({
-        where: { [Op.or]: [{ itaccount: users }, { student_id: users }] },
+        where: userCondition,
         transaction,
       });
 

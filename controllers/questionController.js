@@ -317,10 +317,28 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
-      const newQuestions = questions.map((question) => ({
-        tournament_id: parsedTournamentId,
-        questions_id: question.id,
-      }));
+      const existingAssociations = await QuestionTournament.findAll({
+        where: {
+          tournament_id: parsedTournamentId,
+          questions_id: { [Op.in]: question_id },
+        },
+        transaction,
+      });
+
+      const existingQuestionIds = existingAssociations.map(
+        (assoc) => assoc.questions_id
+      );
+
+      const newQuestions = questions
+        .filter((question) => !existingQuestionIds.includes(question.id))
+        .map((question) => ({
+          tournament_id: parsedTournamentId,
+          questions_id: question.id,
+        }));
+
+      if (newQuestions.length > 0) {
+        await QuestionTournament.bulkCreate(newQuestions, { transaction });
+      }
 
       await QuestionTournament.bulkCreate(newQuestions, { transaction });
 
@@ -338,16 +356,23 @@ const questionController = {
   deleteQuestionFromTournament: async (request, h) => {
     const transaction = await sequelize.transaction();
     try {
-      const questionIds = request.params.id;
+      const { questionIds, tournamentId } = request.params;
       if (!questionIds) {
         return h.response({ message: "Missing question_id" }).code(400);
       }
 
-      const ArrayQuestionId = questionIds
-        .split(",")
-        .map((id) => parseInt(id, 10));
-      if (ArrayQuestionId.some((id) => isNaN(id) || id <= 0)) {
+      if (!tournamentId) {
+        return h.response({ message: "Missing tournament_id" }).code(400);
+      }
+
+      const parsedQuestionId = parseInt(questionIds, 10);
+      if (isNaN(parsedQuestionId) || parsedQuestionId <= 0) {
         return h.response({ message: "Invalid question_id" }).code(400);
+      }
+
+      const parsedTournamentId = parseInt(tournamentId, 10);
+      if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
+        return h.response({ message: "Invalid tournament_id" }).code(400);
       }
 
       const token = request.state["cmu-oauth-token"];
@@ -375,16 +400,22 @@ const questionController = {
       }
 
       const questions = await QuestionTournament.findAll({
-        where: { questions_id: { [Op.in]: ArrayQuestionId } },
+        where: {
+          questions_id: parsedQuestionId,
+          tournament_id: parsedTournamentId,
+        },
         transaction,
       });
 
-      if (questions.length !== ArrayQuestionId.length) {
+      if (!questions) {
         return h.response({ message: "Question not found" }).code(404);
       }
 
       await QuestionTournament.destroy({
-        where: { questions_id: { [Op.in]: ArrayQuestionId } },
+        where: {
+          questions_id: parsedQuestionId,
+          tournament_id: parsedTournamentId,
+        },
         transaction,
       });
 
@@ -835,8 +866,13 @@ const questionController = {
           where.Tournament = false;
         } else if (mode === "Tournament") {
           let parsedTournamentId = null;
+          let parsedTournamentSelected = null;
+          let questionIds = [];
+
           try {
-            if (tournament_id) {
+            if (tournament_selected !== null && tournament_id !== null) {
+              return h.response({ message: "Invalid parameter" }).code(400);
+            } else if (tournament_id) {
               parsedTournamentId = parseInt(tournament_id, 10);
               if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
                 return h
@@ -870,6 +906,26 @@ const questionController = {
                 ],
               });
             } else {
+              if (tournament_selected) {
+                parsedTournamentSelected = parseInt(tournament_selected, 10);
+                if (
+                  isNaN(parsedTournamentSelected) ||
+                  parsedTournamentSelected <= 0
+                ) {
+                  return h
+                    .response({ message: "Invalid tournament_selected" })
+                    .code(400);
+                }
+
+                const existingQuestionIds = await QuestionTournament.findAll({
+                  where: { tournament_id: parsedTournamentSelected },
+                  attributes: ["questions_id"],
+                });
+
+                questionIds = existingQuestionIds.map(
+                  (item) => item.questions_id
+                );
+              }
               question = await Question.findAndCountAll({
                 where: {
                   ...where,
@@ -906,6 +962,7 @@ const questionController = {
                 difficultys_id: q.difficultys_id,
                 author: q.createdBy,
                 mode: "Tournament",
+                is_selected: questionIds.includes(q.id),
               };
             });
 

@@ -80,7 +80,7 @@ const questionRoute = [
   },
   {
     method: "DELETE",
-    path: "/api/questions/tournament/{id}",
+    path: "/api/questions/tournament/{tournamentId}/question/{questionIds}",
     handler: questionController.deleteQuestionFromTournament,
   },
 ];
