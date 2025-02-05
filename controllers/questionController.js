@@ -641,6 +641,13 @@ const questionController = {
             where.Practice = false;
             question = await QuestionTournament.findAndCountAll({
               where: { tournament_id: parsedTournamentId },
+              limit: limit,
+              offset: offset,
+              order: [
+                [{ model: Question, as: "Question" }, "difficultys_id", "ASC"],
+                [{ model: Question, as: "Question" }, "categories_id", "ASC"],
+                [{ model: Question, as: "Question" }, "id", "ASC"],
+              ],
               include: [
                 {
                   model: Question,
@@ -660,15 +667,19 @@ const questionController = {
               ],
             });
           }
+          console.log(question);
 
-          mappedData = question.rows.map((q) => ({
-            id: q.id,
-            title: q.title,
-            point: q.point,
-            categories_name: q.Category?.name,
-            difficultys_id: q.difficultys_id,
-            sovled: TournamentSovledIds.includes(q.id),
-          }));
+          mappedData = question.rows.map((qt) => {
+            const q = qt.Question || qt;
+            return {
+              id: q.id,
+              title: q.title,
+              point: q.point,
+              categories_name: q.Category?.name,
+              difficultys_id: q.difficultys_id,
+              solved: TournamentSovledIds.includes(q.id),
+            };
+          });
 
           totalPages = Math.ceil(question.count / limit);
           hasNextPage = parsedPage < totalPages;
@@ -749,6 +760,7 @@ const questionController = {
         difficulty,
         mode,
         tournament_id,
+        tournament_selected,
       } = request.query;
 
       const token = request.state["cmu-oauth-token"];
