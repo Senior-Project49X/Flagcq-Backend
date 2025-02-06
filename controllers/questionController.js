@@ -11,7 +11,6 @@ const Point = db.Point;
 const Category = db.Category;
 const sequelize = db.sequelize;
 const { Op } = require("sequelize");
-const { request } = require("http");
 const Tournaments = db.Tournament;
 const QuestionTournament = db.QuestionTournament;
 const TournamentSubmited = db.TournamentSubmited;
@@ -598,6 +597,7 @@ const questionController = {
       let hasNextPage = false;
       let mappedData = [];
       let TournamentSovledIds = [];
+      let TotalSubmitted = 0;
 
       if (category) {
         const validCategory = await Category.findOne({
@@ -665,6 +665,26 @@ const questionController = {
               TournamentSovledIds = TournamentSovled.map(
                 (item) => item.question_id
               );
+
+              const teamCountsPerQuestion = await TournamentSubmited.findAll({
+                attributes: [
+                  "question_id",
+                  [
+                    sequelize.fn(
+                      "COUNT",
+                      sequelize.fn("DISTINCT", sequelize.col("team_id"))
+                    ),
+                    "teamCount",
+                  ],
+                ],
+                where: { tournament_id: parsedTournamentId },
+                group: ["question_id"],
+              });
+
+              TotalSubmitted = teamCountsPerQuestion.reduce(
+                (acc, curr) => acc + curr.teamCount,
+                0
+              );
             }
 
             where.Tournament = true;
@@ -697,7 +717,6 @@ const questionController = {
               ],
             });
           }
-          console.log(question);
 
           mappedData = question.rows.map((qt) => {
             const q = qt.Question || qt;
@@ -708,6 +727,7 @@ const questionController = {
               categories_name: q.Category?.name,
               difficultys_id: q.difficultys_id,
               solved: TournamentSovledIds.includes(q.id),
+              sovleCount: TotalSubmitted[q.id] || 0,
             };
           });
 
@@ -756,6 +776,20 @@ const questionController = {
 
       const solvedIds = solvedQuestions.map((item) => item.question_id);
 
+      const submitCounts = await Submited.findAll({
+        attributes: [
+          "question_id",
+          [sequelize.fn("COUNT", sequelize.col("id")), "submitCount"],
+        ],
+        group: ["question_id"],
+        raw: true,
+      });
+
+      const submitCountMap = submitCounts.reduce((acc, curr) => {
+        acc[curr.question_id] = curr.submitCount;
+        return acc;
+      }, {});
+
       mappedData = question.rows.map((q) => ({
         id: q.id,
         title: q.title,
@@ -764,6 +798,7 @@ const questionController = {
         difficultys_id: q.difficultys_id,
         author: q.createdBy,
         solved: solvedIds.includes(q.id),
+        submitCount: submitCountMap[q.id] || 0,
       }));
 
       totalPages = Math.ceil(question.count / limit);
@@ -1020,6 +1055,20 @@ const questionController = {
         ],
       });
 
+      const submitCounts = await Submited.findAll({
+        attributes: [
+          "question_id",
+          [sequelize.fn("COUNT", sequelize.col("id")), "submitCount"],
+        ],
+        group: ["question_id"],
+        raw: true,
+      });
+
+      const submitCountMap = submitCounts.reduce((acc, curr) => {
+        acc[curr.question_id] = curr.submitCount;
+        return acc;
+      }, {});
+
       mappedData = question.rows.map((q) => ({
         id: q.id,
         title: q.title,
@@ -1031,6 +1080,7 @@ const questionController = {
           : q.Tournament
           ? "Tournament"
           : "Unpublished",
+        submitCount: submitCountMap[q.id] || 0,
       }));
 
       totalPages = Math.ceil(question.count / limit);

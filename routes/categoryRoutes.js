@@ -1,5 +1,6 @@
 "use strict";
 
+const path = require("path");
 const categoryController = require("../controllers/categoryController");
 
 const categoryRoute = [
@@ -22,6 +23,11 @@ const categoryRoute = [
     method: "GET",
     path: "/api/categories/{id}",
     handler: categoryController.getCategoriesById,
+  },
+  {
+    method: "PUT",
+    path: "/api/categories/{id}",
+    handler: categoryController.updateCategory,
   },
 ];
 
