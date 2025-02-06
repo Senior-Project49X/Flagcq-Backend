@@ -347,7 +347,8 @@ const questionController = {
   deleteQuestionFromTournament: async (request, h) => {
     const transaction = await sequelize.transaction();
     try {
-      const { questionIds, tournamentId } = request.params;
+      const questionIds = request.params.questionIds;
+      const tournamentId = request.params.tournamentId;
       if (!questionIds) {
         return h.response({ message: "Missing question_id" }).code(400);
       }
