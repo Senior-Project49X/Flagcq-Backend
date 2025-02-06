@@ -870,9 +870,7 @@ const questionController = {
           let questionIds = [];
 
           try {
-            if (tournament_selected !== null && tournament_id !== null) {
-              return h.response({ message: "Invalid parameter" }).code(400);
-            } else if (tournament_id) {
+            if (tournament_id) {
               parsedTournamentId = parseInt(tournament_id, 10);
               if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
                 return h
