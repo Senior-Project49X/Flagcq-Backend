@@ -870,7 +870,11 @@ const questionController = {
           let questionIds = [];
 
           try {
-            if (tournament_id) {
+            if (tournament_id && tournament_selected) {
+              return h
+                .response({ message: "Invalid query parameter" })
+                .code(400);
+            } else if (tournament_id) {
               parsedTournamentId = parseInt(tournament_id, 10);
               if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
                 return h
@@ -880,6 +884,17 @@ const questionController = {
 
               question = await QuestionTournament.findAndCountAll({
                 where: { tournament_id: parsedTournamentId },
+                limit: limit,
+                offset: offset,
+                order: [
+                  [
+                    { model: Question, as: "Question" },
+                    "difficultys_id",
+                    "ASC",
+                  ],
+                  [{ model: Question, as: "Question" }, "categories_id", "ASC"],
+                  [{ model: Question, as: "Question" }, "id", "ASC"],
+                ],
                 include: [
                   {
                     model: Question,
