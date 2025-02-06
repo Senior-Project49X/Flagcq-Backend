@@ -347,8 +347,7 @@ const questionController = {
   deleteQuestionFromTournament: async (request, h) => {
     const transaction = await sequelize.transaction();
     try {
-      const questionIds = request.params.questionIds;
-      const tournamentId = request.params.tournamentId;
+      const { tournamentId, questionIds } = request.params;
       if (!questionIds) {
         return h.response({ message: "Missing question_id" }).code(400);
       }
@@ -399,7 +398,7 @@ const questionController = {
         return h.response({ message: "Tournament not found" }).code(404);
       }
 
-      const questions = await QuestionTournament.findAll({
+      const questions = await QuestionTournament.findOne({
         where: {
           questions_id: parsedQuestionId,
           tournament_id: parsedTournamentId,
@@ -407,7 +406,7 @@ const questionController = {
         transaction,
       });
 
-      if (!questions) {
+      if (!questions || questions.length === 0) {
         return h.response({ message: "Question not found" }).code(404);
       }
 
