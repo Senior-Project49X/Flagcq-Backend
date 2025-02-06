@@ -517,11 +517,11 @@ const questionController = {
           answer: question.Answer,
           author: question.createdBy,
           hints: HintData,
-          mode: question.Practice
-            ? "Practice"
-            : question.Tournament
-            ? "Tournament"
-            : "Unpublished",
+          mode: (() => {
+            if (q.Practice) return "Practice";
+            if (q.Tournament) return "Tournament";
+            return "Unpublished";
+          })(),
         };
 
         return h.response(data).code(200);
@@ -593,18 +593,54 @@ const questionController = {
       let hasNextPage = false;
       let mappedData = [];
       let TournamentSovledIds = [];
-      let TotalSubmitted = 0;
+      let submitCountMap = {};
 
       if (category) {
-        const validCategory = await Category.findOne({
-          where: { name: category },
-          attributes: ["id"],
+        const categoryNames = category.split(",").map((cat) => cat.trim());
+
+        const categories = await Category.findAll({
+          where: { name: { [Op.in]: categoryNames } },
+          attributes: ["id", "name"],
         });
 
-        if (!validCategory) {
-          return h.response({ message: "Category not found" }).code(404);
+        const foundCategoryNames = categories.map((cat) => cat.name);
+
+        const notFoundCategories = categoryNames.filter(
+          (cat) => !foundCategoryNames.includes(cat)
+        );
+
+        if (notFoundCategories.length > 0) {
+          return h
+            .response({
+              message: `Categories not found: ${notFoundCategories.join(", ")}`,
+            })
+            .code(404);
         }
-        where.categories_id = validCategory.id;
+
+        const categoryIds = categories.map((cat) => cat.id);
+
+        if (categoryIds.length > 1) {
+          question = await Question.findAndCountAll({
+            where,
+            limit: limit,
+            offset: offset,
+            include: [
+              {
+                model: Category,
+                where: { id: { [Op.in]: categoryIds } },
+                attributes: [],
+                through: { attributes: [] },
+              },
+            ],
+            group: ["Question.id"],
+            having: sequelize.where(
+              sequelize.fn("COUNT", sequelize.col("Categories.id")),
+              categoryIds.length
+            ),
+          });
+        } else {
+          where.categories_id = categoryIds[0];
+        }
       }
 
       if (difficulty) {
@@ -661,26 +697,6 @@ const questionController = {
               TournamentSovledIds = TournamentSovled.map(
                 (item) => item.question_id
               );
-
-              const teamCountsPerQuestion = await TournamentSubmited.findAll({
-                attributes: [
-                  "question_id",
-                  [
-                    sequelize.fn(
-                      "COUNT",
-                      sequelize.fn("DISTINCT", sequelize.col("team_id"))
-                    ),
-                    "teamCount",
-                  ],
-                ],
-                where: { tournament_id: parsedTournamentId },
-                group: ["question_id"],
-              });
-
-              TotalSubmitted = teamCountsPerQuestion.reduce(
-                (acc, curr) => acc + curr.teamCount,
-                0
-              );
             }
 
             where.Tournament = true;
@@ -712,33 +728,48 @@ const questionController = {
                 },
               ],
             });
+
+            const submitCounts = await TournamentSubmited.findAll({
+              attributes: [
+                "question_id",
+                [sequelize.fn("COUNT", sequelize.col("id")), "submitCount"],
+              ],
+              where: { tournament_id: parsedTournamentId },
+              group: ["question_id"],
+              raw: true,
+            });
+
+            submitCountMap = submitCounts.reduce((acc, curr) => {
+              acc[curr.question_id] = curr.submitCount;
+              return acc;
+            }, {});
+
+            mappedData = question.rows.map((qt) => {
+              const q = qt.Question || qt;
+              return {
+                id: q.id,
+                title: q.title,
+                point: q.point,
+                categories_name: q.Category?.name,
+                difficultys_id: q.difficultys_id,
+                solved: TournamentSovledIds.includes(q.id),
+                submitCount: submitCountMap[q.id] || 0,
+              };
+            });
+
+            totalPages = Math.ceil(question.count / limit);
+            hasNextPage = parsedPage < totalPages;
+
+            return h
+              .response({
+                data: mappedData,
+                totalItems: mappedData.length,
+                currentPage: parsedPage,
+                totalPages: totalPages,
+                hasNextPage: hasNextPage,
+              })
+              .code(200);
           }
-
-          mappedData = question.rows.map((qt) => {
-            const q = qt.Question || qt;
-            return {
-              id: q.id,
-              title: q.title,
-              point: q.point,
-              categories_name: q.Category?.name,
-              difficultys_id: q.difficultys_id,
-              solved: TournamentSovledIds.includes(q.id),
-              sovleCount: TotalSubmitted[q.id] || 0,
-            };
-          });
-
-          totalPages = Math.ceil(question.count / limit);
-          hasNextPage = parsedPage < totalPages;
-
-          return h
-            .response({
-              data: mappedData,
-              totalItems: mappedData.length,
-              currentPage: parsedPage,
-              totalPages: totalPages,
-              hasNextPage: hasNextPage,
-            })
-            .code(200);
         }
       } else {
         return h.response({ message: "Invalid mode parameter" }).code(400);
@@ -781,7 +812,7 @@ const questionController = {
         raw: true,
       });
 
-      const submitCountMap = submitCounts.reduce((acc, curr) => {
+      submitCountMap = submitCounts.reduce((acc, curr) => {
         acc[curr.question_id] = curr.submitCount;
         return acc;
       }, {});
@@ -813,6 +844,7 @@ const questionController = {
       return h.response({ message: error.message }).code(500);
     }
   },
+
   getAllQuestions: async (request, h) => {
     try {
       const {
@@ -864,18 +896,54 @@ const questionController = {
       let totalPages = 0;
       let hasNextPage = false;
       let mappedData = [];
+      let submitCountMap = {};
 
       if (category) {
-        const validCategory = await Category.findOne({
-          where: { name: category },
-          attributes: ["id"],
+        const categoryNames = category.split(",").map((cat) => cat.trim());
+
+        const categories = await Category.findAll({
+          where: { name: { [Op.in]: categoryNames } },
+          attributes: ["id", "name"],
         });
 
-        if (!validCategory) {
-          return h.response({ message: "Category not found" }).code(404);
+        const foundCategoryNames = categories.map((cat) => cat.name);
+
+        const notFoundCategories = categoryNames.filter(
+          (cat) => !foundCategoryNames.includes(cat)
+        );
+
+        if (notFoundCategories.length > 0) {
+          return h
+            .response({
+              message: `Categories not found: ${notFoundCategories.join(", ")}`,
+            })
+            .code(404);
         }
 
-        where.categories_id = validCategory.id;
+        const categoryIds = categories.map((cat) => cat.id);
+
+        if (categoryIds.length > 1) {
+          question = await Question.findAndCountAll({
+            where,
+            limit: limit,
+            offset: offset,
+            include: [
+              {
+                model: Category,
+                where: { id: { [Op.in]: categoryIds } },
+                attributes: [],
+                through: { attributes: [] },
+              },
+            ],
+            group: ["Question.id"],
+            having: sequelize.where(
+              sequelize.fn("COUNT", sequelize.col("Categories.id")),
+              categoryIds.length
+            ),
+          });
+        } else {
+          where.categories_id = categoryIds[0];
+        }
       }
 
       if (difficulty) {
@@ -884,7 +952,6 @@ const questionController = {
             .response({ message: "Invalid difficulty parameter" })
             .code(400);
         }
-
         where.difficultys_id = difficulty;
       }
 
@@ -948,6 +1015,21 @@ const questionController = {
                   },
                 ],
               });
+
+              const submitCounts = await TournamentSubmited.findAll({
+                attributes: [
+                  "question_id",
+                  [sequelize.fn("COUNT", sequelize.col("id")), "submitCount"],
+                ],
+                where: { tournament_id: parsedTournamentId },
+                group: ["question_id"],
+                raw: true,
+              });
+
+              submitCountMap = submitCounts.reduce((acc, curr) => {
+                acc[curr.question_id] = curr.submitCount;
+                return acc;
+              }, {});
             } else {
               if (tournament_selected) {
                 parsedTournamentSelected = parseInt(tournament_selected, 10);
@@ -993,6 +1075,24 @@ const questionController = {
                   },
                 ],
               });
+
+              const submitCounts = await TournamentSubmited.findAll({
+                attributes: [
+                  "question_id",
+                  [sequelize.fn("COUNT", sequelize.col("id")), "submitCount"],
+                ],
+                where: {
+                  question_id: question.rows.map((q) => q.id),
+                  tournament_id: parsedTournamentSelected || null,
+                },
+                group: ["question_id"],
+                raw: true,
+              });
+
+              submitCountMap = submitCounts.reduce((acc, curr) => {
+                acc[curr.question_id] = curr.submitCount;
+                return acc;
+              }, {});
             }
 
             mappedData = question.rows.map((qt) => {
@@ -1006,6 +1106,7 @@ const questionController = {
                 author: q.createdBy,
                 mode: "Tournament",
                 is_selected: questionIds.includes(q.id),
+                submitCount: submitCountMap[q.id] || 0,
               };
             });
 
@@ -1060,7 +1161,7 @@ const questionController = {
         raw: true,
       });
 
-      const submitCountMap = submitCounts.reduce((acc, curr) => {
+      submitCountMap = submitCounts.reduce((acc, curr) => {
         acc[curr.question_id] = curr.submitCount;
         return acc;
       }, {});
@@ -1071,11 +1172,11 @@ const questionController = {
         point: q.point,
         categories_name: q.Category?.name || null,
         difficultys_id: q.difficultys_id,
-        mode: q.Practice
-          ? "Practice"
-          : q.Tournament
-          ? "Tournament"
-          : "Unpublished",
+        mode: (() => {
+          if (q.Practice) return "Practice";
+          if (q.Tournament) return "Tournament";
+          return "Unpublished";
+        })(),
         submitCount: submitCountMap[q.id] || 0,
       }));
 
@@ -1209,15 +1310,16 @@ const questionController = {
         if (existingFile) {
           return h.response({ message: "File already exists" }).code(409);
         }
-      } else if (isFileEdited === "true" && !file?.filename) {
-        try {
-          fs.unlinkSync(
-            path.join(__dirname, "..", "uploads", question.file_path)
-          );
-        } catch (err) {
-          console.warn("Failed to delete old file:", err);
+      } else if (isFileEdited === "true") {
+        if (question.file_path) {
+          try {
+            fs.unlinkSync(
+              path.join(__dirname, "..", "uploads", question.file_path)
+            );
+          } catch (err) {
+            console.warn("Failed to delete old file:", err);
+          }
         }
-
         file_path = null;
       }
 
@@ -1343,10 +1445,6 @@ const questionController = {
         } else if (Practice === "true") {
           question.Practice = true;
           question.Tournament = false;
-        } else if (Practice === "true" && Tournament === "true") {
-          return h
-            .response({ message: "Invalid value for Practice and Tournament" })
-            .code(400);
         }
       }
 
@@ -1358,10 +1456,6 @@ const questionController = {
         } else if (Tournament === "true") {
           question.Practice = false;
           question.Tournament = true;
-        } else if (Tournament === "true" && Practice === "true") {
-          return h
-            .response({ message: "Invalid value for Practice and Tournament" })
-            .code(400);
         }
       }
 
