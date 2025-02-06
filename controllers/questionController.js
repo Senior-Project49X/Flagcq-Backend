@@ -236,10 +236,7 @@ const questionController = {
   addQuestionToTournament: async (request, h) => {
     const transaction = await sequelize.transaction();
     try {
-      const {
-        question_id, // Array of question_id
-        tournament_id,
-      } = request.payload;
+      const { question_id, tournament_id } = request.payload;
 
       if (!Array.isArray(question_id)) {
         return h
@@ -304,7 +301,7 @@ const questionController = {
       });
 
       if (questions.length !== question_id.length) {
-        return h.response({ message: "Question not found" }).code(404);
+        return h.response({ message: "Some questions not found" }).code(404);
       }
 
       const existingAssociations = await QuestionTournament.findAll({
@@ -315,12 +312,12 @@ const questionController = {
         transaction,
       });
 
-      const existingQuestionIds = existingAssociations.map(
-        (assoc) => assoc.questions_id
+      const existingQuestionIds = new Set(
+        existingAssociations.map((assoc) => assoc.questions_id)
       );
 
       const newQuestions = questions
-        .filter((question) => !existingQuestionIds.includes(question.id))
+        .filter((question) => !existingQuestionIds.has(question.id))
         .map((question) => ({
           tournament_id: parsedTournamentId,
           questions_id: question.id,
@@ -330,10 +327,10 @@ const questionController = {
         await QuestionTournament.bulkCreate(newQuestions, { transaction });
       }
 
-      await QuestionTournament.bulkCreate(newQuestions, { transaction });
-
       await transaction.commit();
-      return h.response({ message: "Question added to tournament" }).code(201);
+      return h
+        .response({ message: "Questions added to tournament successfully" })
+        .code(201);
     } catch (error) {
       if (transaction) {
         await transaction.rollback();
@@ -342,7 +339,6 @@ const questionController = {
       return h.response({ message: error.message }).code(500);
     }
   },
-
   deleteQuestionFromTournament: async (request, h) => {
     const transaction = await sequelize.transaction();
     try {
