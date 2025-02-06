@@ -120,7 +120,7 @@ const questionController = {
       }
 
       let file_path = null;
-      if (file && file.filename) {
+      if (file?.filename) {
         const allowedFileTypes = [
           "application/x-compressed",
           "application/x-zip-compressed",
@@ -156,11 +156,6 @@ const questionController = {
             .code(400);
         } else if (Practice === "true") {
           isPractice = true;
-          isTournament = false;
-        } else if (Practice === "true" && Tournament === "true") {
-          return h
-            .response({ message: "Invalid value for Practice and Tournament" })
-            .code(400);
         }
       }
 
@@ -172,10 +167,6 @@ const questionController = {
         } else if (Tournament === "true") {
           isPractice = false;
           isTournament = true;
-        } else if (Tournament === "true" && Practice === "true") {
-          return h
-            .response({ message: "Invalid value for Practice and Tournament" })
-            .code(400);
         }
       }
 
@@ -397,6 +388,14 @@ const questionController = {
 
       if (user.role !== "Admin") {
         return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const tournament = await Tournaments.findByPk(parsedTournamentId, {
+        transaction,
+      });
+
+      if (!tournament) {
+        return h.response({ message: "Tournament not found" }).code(404);
       }
 
       const questions = await QuestionTournament.findAll({
