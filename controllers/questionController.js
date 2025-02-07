@@ -518,9 +518,10 @@ const questionController = {
           author: question.createdBy,
           hints: HintData,
           mode: (() => {
-            if (q.Practice) return "Practice";
-            if (q.Tournament) return "Tournament";
+            if (question.Practice) return "Practice";
+            if (question.Tournament) return "Tournament";
             return "Unpublished";
+            ``;
           })(),
         };
 
@@ -731,11 +732,11 @@ const questionController = {
 
             const submitCounts = await TournamentSubmited.findAll({
               attributes: [
-                "question_id",
+                "question_touurnament_id",
                 [sequelize.fn("COUNT", sequelize.col("id")), "submitCount"],
               ],
               where: { tournament_id: parsedTournamentId },
-              group: ["question_id"],
+              group: ["question_touurnament_id"],
               raw: true,
             });
 
@@ -1078,14 +1079,14 @@ const questionController = {
 
               const submitCounts = await TournamentSubmited.findAll({
                 attributes: [
-                  "question_id",
+                  "question_touurnament_id",
                   [sequelize.fn("COUNT", sequelize.col("id")), "submitCount"],
                 ],
                 where: {
                   question_id: question.rows.map((q) => q.id),
                   tournament_id: parsedTournamentSelected || null,
                 },
-                group: ["question_id"],
+                group: ["question_touurnament_id"],
                 raw: true,
               });
 
