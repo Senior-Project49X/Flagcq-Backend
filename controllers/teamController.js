@@ -696,7 +696,7 @@ const teamController = {
       }
 
       const team = userTeam.team;
-      console.log(team);
+      // console.log(team);
 
       const teamMembers = await Users_Team.findAll({
         where: { team_id: teamId },

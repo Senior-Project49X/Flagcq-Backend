@@ -60,6 +60,16 @@ const tournamentRoutes = [
   },
   {
     method: "GET",
+    path: "/api/joinedTournament",
+    handler: tournamentController.getJoinedTournaments,
+    options: {
+      description: "Get all joined tournaments",
+      notes: "Returns a list of all joined tournaments. For MyTeam Page",
+      tags: ["api", "tournaments"],
+    },
+  },
+  {
+    method: "GET",
     path: "/api/info/{tournament_id}",
     handler: tournamentController.getAllInfoInTournament,
     options: {
