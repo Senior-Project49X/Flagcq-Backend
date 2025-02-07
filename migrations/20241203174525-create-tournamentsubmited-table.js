@@ -71,18 +71,6 @@ module.exports = {
         },
       }
     );
-
-    await queryInterface.addConstraint("TournamentSubmited", {
-      fields: ["tournament_id"],
-      type: "foreign key",
-      name: "FK_TeamScores_tournament_id",
-      references: {
-        table: "Tournament",
-        field: "id",
-      },
-      onDelete: "CASCADE",
-      onUpdate: "CASCADE",
-    });
   },
 
   async down(queryInterface, Sequelize) {

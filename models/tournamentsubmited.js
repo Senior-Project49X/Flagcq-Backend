@@ -51,12 +51,12 @@ module.exports = (sequelize) => {
   );
 
   TournamentSubmited.associate = function (models) {
-    TournamentSubmited.belongsTo(models.User, { foreignKey: "user_id" });
+    TournamentSubmited.belongsTo(models.User, { foreignKey: "users_id" });
     TournamentSubmited.belongsTo(models.Tournament, {
       foreignKey: "tournament_id",
     });
     TournamentSubmited.belongsTo(models.QuestionTournament, {
-      foreignKey: "id",
+      foreignKey: "question_tournament_id",
     });
     TournamentSubmited.belongsTo(models.Team, { foreignKey: "team_id" });
   };
