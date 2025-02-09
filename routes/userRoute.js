@@ -20,6 +20,11 @@ const userRoute = [
     handler: usersController.getUserPractice,
   },
   {
+    method: "GET",
+    path: "/api/user/tournament/{id}",
+    handler: usersController.getUserTournament,
+  },
+  {
     method: "POST",
     path: "/api/token",
     handler: usersController.testToken,

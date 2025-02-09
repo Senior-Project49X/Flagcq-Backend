@@ -6,7 +6,10 @@ const jwt = require("jsonwebtoken");
 const axios = require("axios");
 const User = db.User;
 const Point = db.Point;
-const { Op } = require("sequelize");
+const Team = db.Team;
+const User_Team = db.Users_Team;
+const TournamentPoints = db.TournamentPoints;
+const { Op, where } = require("sequelize");
 
 const usersController = {
   EntraLogin: async (request, h) => {
@@ -104,50 +107,7 @@ const usersController = {
       return h.response({ error: "Logout failed" }).code(500);
     }
   },
-  getAllUsers: async (request, h) => {
-    try {
-      const token = request.state["cmu-oauth-token"];
-      if (!token) {
-        return h.response({ message: "Unauthorized" }).code(401);
-      }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
-
-      if (user.role !== "Admin") {
-        return h.response({ message: "Unauthorized" }).code(401);
-      }
-
-      const allUsers = await User.findAll({
-        attributes: [
-          "first_name",
-          "last_name",
-          "faculty",
-          "student_id",
-          "itaccount",
-          "role",
-        ],
-      });
-
-      return h.response(allUsers).code(200);
-    } catch (err) {
-      console.error(err);
-      if (err.name === "TokenExpiredError") {
-        return h.response({ message: "Token expired" }).code(401);
-      } else if (err.name === "JsonWebTokenError") {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-      return h.response({ error: "Get all users failed" }).code(500);
-    }
-  },
   getUserPractice: async (request, h) => {
     try {
       const token = request.state["cmu-oauth-token"];
@@ -208,6 +168,12 @@ const usersController = {
   },
   getUserTournament: async (request, h) => {
     try {
+      const tournamentId = request.params.id;
+      const parsedId = parseInt(tournamentId, 10);
+      if (isNaN(parsedId) || parsedId < 1) {
+        return h.response({ message: "Invalid tournament id" }).code(400);
+      }
+
       const token = request.state["cmu-oauth-token"];
       if (!token) {
         return h.response({ message: "Unauthorized" }).code(401);
@@ -221,6 +187,18 @@ const usersController = {
       const user = await User.findOne({
         where: { itaccount: decoded.email },
       });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      const point = await TournamentPoints.findOne({
+        where: { users_id: user.user_id, tournament_id: parsedId },
+      });
+
+      if (!point) {
+        return h.response({ message: "Points not found" }).code(404);
+      }
 
       return h
         .response({
@@ -316,7 +294,7 @@ const usersController = {
       let userCondition = {};
       if (typeof users === "string" && users.includes("@")) {
         userCondition = { itaccount: users };
-      } else if (!isNaN(parseInt(users, 10))) {
+      } else if (!isNaN(parseInt(users, 10) && parseInt(users, 10) > 0)) {
         userCondition = { student_id: parseInt(users, 10) };
       } else {
         await transaction.rollback();

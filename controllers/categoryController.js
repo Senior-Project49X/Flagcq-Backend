@@ -67,7 +67,7 @@ const categoryController = {
   deleteCategory: async (request, h) => {
     try {
       const categoryId = parseInt(request.params.id, 10);
-      if (isNaN(categoryId)) {
+      if (isNaN(categoryId) || categoryId <= 0) {
         return h.response({ error: "Invalid category ID" }).code(400);
       }
 
@@ -108,7 +108,7 @@ const categoryController = {
   getCategoriesById: async (request, h) => {
     try {
       const categoryId = parseInt(request.params.id, 10);
-      if (isNaN(categoryId)) {
+      if (isNaN(categoryId) || categoryId <= 0) {
         return h.response({ error: "Invalid category ID" }).code(400);
       }
 
@@ -135,7 +135,7 @@ const categoryController = {
   updateCategory: async (request, h) => {
     try {
       const categoryId = parseInt(request.params.id, 10);
-      if (isNaN(categoryId)) {
+      if (isNaN(categoryId) || categoryId <= 0) {
         return h.response({ error: "Invalid category ID" }).code(400);
       }
 

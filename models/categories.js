@@ -22,5 +22,9 @@ module.exports = (sequelize) => {
     }
   );
 
+  Category.associate = function (models) {
+    Category.hasMany(models.Question, { foreignKey: "categories_id" });
+  };
+
   return Category;
 };

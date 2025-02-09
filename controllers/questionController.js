@@ -46,7 +46,7 @@ const questionController = {
       }
 
       const parsedCategoriesId = parseInt(categories_id, 10);
-      if (isNaN(parsedCategoriesId)) {
+      if (isNaN(parsedCategoriesId) || parsedCategoriesId <= 0) {
         return h.response({ message: "Invalid categories_id" }).code(400);
       }
 
@@ -209,7 +209,7 @@ const questionController = {
 
         const totalPenalty = newHints.reduce((sum, curr) => {
           const point = parseInt(curr.point, 10);
-          if (isNaN(point)) {
+          if (isNaN(point) || point < 0) {
             throw new Error(`Invalid penalty format: ${curr.point}`);
           }
           return sum + point;
@@ -405,6 +405,19 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
+      const existingSubmission = await TournamentSubmited.findOne({
+        where: { question_id: parsedQuestionId, team_id: user.team_id },
+        transaction,
+      });
+
+      if (existingSubmission) {
+        return h
+          .response({
+            message: "Cannot delete question that has been submitted",
+          })
+          .code(400);
+      }
+
       await QuestionTournament.destroy({
         where: {
           questions_id: parsedQuestionId,
@@ -429,7 +442,7 @@ const questionController = {
   getQuestionById: async (request, h) => {
     try {
       const questionId = parseInt(request.params.id, 10);
-      if (isNaN(questionId)) {
+      if (isNaN(questionId) || questionId <= 0) {
         return h.response({ message: "Invalid question ID" }).code(400);
       }
 
@@ -924,22 +937,27 @@ const questionController = {
 
         if (categoryIds.length > 1) {
           question = await Question.findAndCountAll({
-            where,
+            where: {
+              ...where,
+              categories_id: { [Op.in]: categoryIds },
+            },
             limit: limit,
             offset: offset,
+            order: [
+              ["difficultys_id", "ASC"],
+              ["categories_id", "ASC"],
+              ["id", "ASC"],
+            ],
+            attributes: {
+              exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
+            },
             include: [
               {
                 model: Category,
-                where: { id: { [Op.in]: categoryIds } },
-                attributes: [],
-                through: { attributes: [] },
+                as: "Category",
+                attributes: ["name"],
               },
             ],
-            group: ["Question.id"],
-            having: sequelize.where(
-              sequelize.fn("COUNT", sequelize.col("Categories.id")),
-              categoryIds.length
-            ),
           });
         } else {
           where.categories_id = categoryIds[0];
@@ -1197,7 +1215,7 @@ const questionController = {
     const transaction = await sequelize.transaction();
     try {
       const questionId = parseInt(request.params.id, 10);
-      if (isNaN(questionId)) {
+      if (isNaN(questionId) || questionId <= 0) {
         return h.response({ message: "Invalid question ID" }).code(400);
       }
 
@@ -1416,7 +1434,7 @@ const questionController = {
 
         const totalPenalty = newHints.reduce((sum, curr) => {
           const point = parseInt(curr.point, 10);
-          if (isNaN(point)) {
+          if (isNaN(point) || point < 0) {
             throw new Error(`Invalid penalty format: ${curr.point}`);
           }
           return sum + point;
@@ -1473,7 +1491,7 @@ const questionController = {
     const transaction = await sequelize.transaction();
     try {
       const questionId = parseInt(request.params.id, 10);
-      if (isNaN(questionId)) {
+      if (isNaN(questionId) || questionId <= 0) {
         return h.response({ message: "Invalid question ID" }).code(400);
       }
 
@@ -1816,7 +1834,7 @@ const questionController = {
   downloadFile: async (request, h) => {
     try {
       const questionId = parseInt(request.params.id, 10);
-      if (isNaN(questionId)) {
+      if (isNaN(questionId) || questionId <= 0) {
         return h.response({ message: "Invalid question ID" }).code(400);
       }
 
@@ -1864,7 +1882,7 @@ const questionController = {
   UseHint: async (request, h) => {
     try {
       const HintId = parseInt(request.params.id, 10);
-      if (isNaN(HintId)) {
+      if (isNaN(HintId) || HintId <= 0) {
         return h.response({ message: "Invalid hint ID" }).code(400);
       }
 

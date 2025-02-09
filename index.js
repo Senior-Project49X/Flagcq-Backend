@@ -3,7 +3,6 @@
 const Hapi = require("@hapi/hapi");
 const db = require("./models");
 const sequelize = db.sequelize;
-const Hello = require("./routes/hello");
 const categoryRoute = require("./routes/categoryRoutes");
 const userRoute = require("./routes/userRoute");
 const questionRoute = require("./routes/questionRoutes");
