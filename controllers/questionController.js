@@ -1600,6 +1600,45 @@ const questionController = {
         });
       }
 
+      const existingTournament = await QuestionTournament.findOne({
+        where: { questions_id: question.id },
+        transaction,
+      });
+
+      if (existingTournament) {
+        await QuestionTournament.destroy({
+          where: { questions_id: question.id },
+          transaction,
+        });
+
+        const existingTournamentSubmited = await TournamentSubmited.findAll({
+          where: { question_id: question.id },
+          transaction,
+        });
+
+        if (existingTournamentSubmited.length > 0) {
+          const TeamIds = existingTournamentSubmited.map(
+            (item) => item.team_id
+          );
+          const UserIds = existingTournamentSubmited.map(
+            (item) => item.users_id
+          );
+          await TeamScores.update(
+            { points: sequelize.literal("total_points - " + question.point) },
+            { where: { team_id: { [Op.in]: TeamIds } }, transaction }
+          );
+          await TournamentPoints.update(
+            { points: sequelize.literal("points - " + question.point) },
+            { where: { users_id: { [Op.in]: UserIds } }, transaction }
+          );
+
+          await TournamentSubmited.destroy({
+            where: { question_id: question.id },
+            transaction,
+          });
+        }
+      }
+
       await question.destroy({ transaction });
 
       await transaction.commit();
