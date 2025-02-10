@@ -45,7 +45,7 @@ module.exports = (sequelize) => {
       },
     },
     {
-      table: "TournamentSubmited",
+      tableName: "TournamentSubmited",
       timestamps: true,
     }
   );

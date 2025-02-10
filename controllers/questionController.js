@@ -407,7 +407,10 @@ const questionController = {
       }
 
       const existingSubmission = await TournamentSubmited.findOne({
-        where: { question_id: parsedQuestionId, team_id: user.team_id },
+        where: {
+          question_tournament_id: questions.id,
+          tournament_id: parsedTournamentId,
+        },
         transaction,
       });
 
@@ -697,7 +700,7 @@ const questionController = {
                 include: [
                   {
                     model: Team,
-                    as: "Team",
+                    as: "team",
                     attributes: ["id", "tournament_id", "name"],
                     where: { tournament_id: parsedTournamentId },
                   },
@@ -710,7 +713,7 @@ const questionController = {
               }
 
               const TournamentSovled = await TournamentSubmited.findAll({
-                where: { team_id: Userteam.Team.id },
+                where: { team_id: Userteam.team.id },
               });
               TournamentSovledIds = TournamentSovled.map(
                 (item) => item.question_id
@@ -1728,6 +1731,17 @@ const questionController = {
         return h.response({ message: "Invalid token" }).code(401);
       }
 
+      const existingTournament = await QuestionTournament.findOne({
+        where: { questions_id: parsedId },
+        transaction,
+      });
+
+      if (existingTournament) {
+        return h
+          .response({ message: "Cannot submit tournament question" })
+          .code(400);
+      }
+
       const answer = "CTFCQ{" + question.Answer + "}";
       if (answer === Answer) {
         const user = await User.findOne({
@@ -1822,6 +1836,12 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
+      if (question.Question.Practice) {
+        return h
+          .response({ message: "Cannot submit practice question" })
+          .code(400);
+      }
+
       const token = request.state["cmu-oauth-token"];
       if (!token) {
         return h.response({ message: "Unauthorized" }).code(401);
@@ -1866,7 +1886,7 @@ const questionController = {
           include: [
             {
               model: Team,
-              as: "Team",
+              as: "team",
               attributes: ["id", "tournament_id", "name"],
               where: { tournament_id: tournamentId },
             },
