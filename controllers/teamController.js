@@ -3,6 +3,7 @@ const db = require("../models");
 const { Team, Users_Team, TeamScores, User, TournamentPoints, Tournament } = db;
 const axios = require("axios");
 const { Op } = require("sequelize");
+const moment = require('moment-timezone');
 
 const teamController = {
   // Helper function to generate a random invite code (8 characters)
@@ -20,22 +21,22 @@ const teamController = {
   // Create Team function
   createTeam: async (req, h) => {
     try {
-      const { name, tournament_id } = req.payload;
-
+      const { name, tournament_id, join_code } = req.payload;
+  
       if (!name || !tournament_id) {
         return h
           .response({ message: "Name and Tournament ID are required." })
           .code(400);
       }
-
-      // Retrieve and verify the token from the cookie
+      
+  
       const token = req.state["cmu-oauth-token"];
       if (!token) {
         return h
           .response({ message: "Unauthorized: No token provided." })
           .code(401);
       }
-
+  
       let decoded;
       try {
         decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
@@ -44,8 +45,7 @@ const teamController = {
           .response({ message: "Unauthorized: Invalid token." })
           .code(401);
       }
-
-      // Retrieve user
+  
       const user = await User.findOne({
         where: {
           [Op.or]: [
@@ -54,14 +54,43 @@ const teamController = {
           ],
         },
       });
-
+  
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
       }
-
+  
       const user_id = user.user_id;
 
-      // Check if the user is already in a team for this tournament
+      // Check current time against tournament's enroll_endDate
+      const currentTime = moment.tz("Asia/Bangkok");
+    
+      const tournament = await Tournament.findOne({
+        where: { id: tournament_id },
+      });
+  
+      if (!tournament) {
+        return h.response({ message: "Tournament not found." }).code(404);
+      }
+
+      if (currentTime.isAfter(tournament.enroll_endDate)) {
+        return h.response({ message: "Enrollment period has ended." }).code(400);
+      }
+      console.log(currentTime);
+      console.log(tournament.enroll_endDate);
+  
+      // Check the mode of the tournament
+      if (tournament.mode === 'Private') {
+        if (!join_code || join_code !== tournament.joinCode) {
+          return h.response({ message: "Invalid join code for the private tournament." }).code(400);
+        }
+      }
+
+      // Check the team limit
+      const existingTeamCount = await Team.count({ where: { tournament_id } });
+      if (existingTeamCount >= tournament.teamLimit) {
+        return h.response({ message: "The team limit for this tournament has been reached." }).code(400);
+      }
+  
       const userAlreadyInTeam = await Users_Team.findOne({
         include: [
           {
@@ -72,7 +101,7 @@ const teamController = {
         ],
         where: { users_id: user_id },
       });
-
+  
       if (userAlreadyInTeam) {
         return h
           .response({
@@ -80,12 +109,11 @@ const teamController = {
           })
           .code(400);
       }
-
-      // Check if a team with the same name already exists
+  
       const existingTeam = await Team.findOne({
         where: { name, tournament_id },
       });
-
+  
       if (existingTeam) {
         return h
           .response({
@@ -93,35 +121,30 @@ const teamController = {
           })
           .code(400);
       }
-
-      // Create the team
+  
       const newTeam = await Team.create({
         name,
         tournament_id,
         invite_code: teamController.generateInviteCode(),
       });
-
-      // Add the creator to the team in Users_Team
+  
       await Users_Team.create({
         users_id: user_id,
         team_id: newTeam.id,
       });
-
-      // Initialize the team score in TeamScores
+  
       await TeamScores.create({
         team_id: newTeam.id,
         tournament_id,
         total_points: 0,
       });
-
-      // Initialize individual score for the creator in TournamentPoints
-      // No need to provide 'id' field; it will be auto-generated
+  
       await TournamentPoints.create({
         users_id: user_id,
         tournament_id,
-        points: 0, // Set points to 0
+        points: 0,
       });
-
+  
       return h
         .response({
           message: "Team created successfully",
@@ -242,29 +265,23 @@ const teamController = {
   joinTeam: async (req, h) => {
     try {
       const { invite_code } = req.payload;
-
+  
       if (!invite_code) {
         return h.response({ message: "Invite code is required." }).code(400);
       }
-
-      // Retrieve and verify the token from the cookie
+  
       const token = req.state["cmu-oauth-token"];
       if (!token) {
-        return h
-          .response({ message: "Unauthorized: No token provided." })
-          .code(401);
+        return h.response({ message: "Unauthorized: No token provided." }).code(401);
       }
-
+  
       let decoded;
       try {
         decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
       } catch (err) {
-        return h
-          .response({ message: "Unauthorized: Invalid token." })
-          .code(401);
+        return h.response({ message: "Unauthorized: Invalid token." }).code(401);
       }
-
-      // Retrieve user using decoded data
+  
       const user = await User.findOne({
         where: {
           [Op.or]: [
@@ -273,80 +290,69 @@ const teamController = {
           ],
         },
       });
-
+  
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
       }
-
+  
       const user_id = user.user_id;
-
-      // Find the team by invite code
-      const team = await Team.findOne({ where: { invite_code } });
-
-      if (!team) {
-        return h
-          .response({ message: "Team not found with that invite code." })
-          .code(404);
+  
+      let team;
+      if (invite_code.length === 8) {
+        // Public tournament: Join existing team
+        team = await Team.findOne({ where: { invite_code } });
+  
+        if (!team) {
+          return h.response({ message: "Team not found with that invite code." }).code(404);
+        }
+      } else if (invite_code.length === 6) {
+        // Private tournament: Check if tournament exists
+        const privateTournament = await Tournament.findOne({ where: { joinCode: invite_code, mode: 'Private' } });
+  
+        if (!privateTournament) {
+          return h.response({ message: "Invalid private tournament code." }).code(404);
+        }
+  
+        // Return prompt for team name
+        return h.response({ message: "Enter a team name to join the private tournament.", tournament_id: privateTournament.id }).code(200);
+      } else {
+        return h.response({ message: "Invalid invite code format." }).code(400);
       }
+  
+      // Fetch the tournament details
+      const tournament = await Tournament.findOne({ where: { id: team.tournament_id } });
+      const teamMembersCount = await Users_Team.count({ where: { team_id: team.id } });
 
-      // Check if the team already has 4 members
-      const teamMembersCount = await Users_Team.count({
-        where: { team_id: team.id },
-      });
-
-      if (teamMembersCount >= 4) {
-        return h
-          .response({ message: "Team already has 4 members. Cannot join." })
-          .code(400);
+      const currentTime = moment.tz("Asia/Bangkok");
+      if (currentTime.isAfter(tournament.enroll_endDate)) {
+        return h.response({ message: "Enrollment period has ended." }).code(400);
       }
-
-      // Check if the user is already in the team using the alias "team"
+      
       const userAlreadyInTeam = await Users_Team.findOne({
         where: { users_id: user_id, team_id: team.id },
-        include: [
-          {
-            model: Team,
-            as: "team", // Use the alias defined in Users_Team model
-            attributes: [], // Optional: Exclude Team attributes if not needed
-          },
-        ],
       });
-
+  
       if (userAlreadyInTeam) {
-        return h
-          .response({
-            message: "User is already in a team for this tournament.",
-          })
-          .code(400);
+        return h.response({ message: "User is already in a team for this tournament." }).code(400);
       }
-
-      // Add the user to the team
-      await Users_Team.create({
-        users_id: user_id,
-        team_id: team.id,
-      });
-
-      // Initialize the user's individual score in TournamentPoints
+  
+      // Check if the team has reached the limit
+      if (teamMembersCount >= tournament.teamSizeLimit) {
+        return h.response({ message: `This team is FULL. PLEASE CREATE NEW TEAM OR JOIN OTHER TEAM.` }).code(400);
+      }
+  
+      await Users_Team.create({ users_id: user_id, team_id: team.id });
+  
       await TournamentPoints.create({
         users_id: user_id,
         tournament_id: team.tournament_id,
         points: 0,
       });
-
-      return h
-        .response({
-          message: "Successfully joined the team",
-          team,
-        })
-        .code(200);
+  
+      return h.response({ message: "Successfully joined the team", team }).code(200);
     } catch (error) {
       console.error("Error joining team:", error.message);
-      return h
-        .response({
-          message: "Failed to join team",
-          error: error.message,
-        })
-        .code(500);
+      return h.response({ message: "Failed to join team", error: error.message }).code(500);
     }
   },
 
@@ -370,35 +376,21 @@ const teamController = {
           .code(404);
       }
 
-      // Check if the team already has 4 members
-      const teamMembersCount = await Users_Team.count({
-        where: { team_id: team.id },
-      });
-
-      if (teamMembersCount >= 4) {
-        return h
-          .response({ message: "Team already has 4 members. Cannot join." })
-          .code(400);
-      }
-
-      // Check if the user is already in the team using the alias "team"
+      // Fetch the tournament details
+      const tournament = await Tournament.findOne({ where: { id: team.tournament_id } });
+      const teamMembersCount = await Users_Team.count({ where: { team_id: team.id } });
+      
       const userAlreadyInTeam = await Users_Team.findOne({
         where: { users_id: users_id, team_id: team.id },
-        include: [
-          {
-            model: Team,
-            as: "team", // Use the alias defined in Users_Team model
-            attributes: [], // Optional: Exclude Team attributes if not needed
-          },
-        ],
       });
-
+  
       if (userAlreadyInTeam) {
-        return h
-          .response({
-            message: "User is already in a team for this tournament.",
-          })
-          .code(400);
+        return h.response({ message: "User is already in a team for this tournament." }).code(400);
+      }
+  
+      // Check if the team has reached the limit
+      if (teamMembersCount >= tournament.teamSizeLimit) {
+        return h.response({ message: `Team is full. Limit is ${tournament.teamSizeLimit} members.` }).code(400);
       }
 
       // Add the user to the team
@@ -717,6 +709,8 @@ const teamController = {
       }));
 
       const memberCount = teamMembers.length; // Count the number of team members
+      const tournament = await Tournament.findOne({ where: { id: tournamentId } });
+      
 
       return h
         .response({
@@ -725,6 +719,7 @@ const teamController = {
           teamName: team.name,
           invitedCode: team.invite_code,
           memberCount,
+          memberLimit: tournament.teamSizeLimit,
           members,
         })
         .code(200);

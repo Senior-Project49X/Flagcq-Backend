@@ -34,6 +34,29 @@ module.exports = {
         type: Sequelize.DATE,
         allowNull: false,
       },
+      mode: {
+        type: Sequelize.ENUM('Public', 'Private'),
+        allowNull: false,
+      },
+      teamSizeLimit: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        defaultValue: 4, 
+      },
+      teamLimit: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        defaultValue: 120, // Set default team limit
+      },
+      playerLimit: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+      },
+      joinCode: {
+        type: Sequelize.STRING(6),
+        allowNull: true,
+        unique: true,
+      },
     });
   },
 
