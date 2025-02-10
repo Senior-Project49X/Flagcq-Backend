@@ -635,28 +635,32 @@ const questionController = {
 
         if (categoryIds.length > 1) {
           question = await Question.findAndCountAll({
-            where,
+            where: {
+              ...where,
+              categories_id: { [Op.in]: categoryIds },
+            },
             limit: limit,
             offset: offset,
+            order: [
+              ["difficultys_id", "ASC"],
+              ["categories_id", "ASC"],
+              ["id", "ASC"],
+            ],
+            attributes: {
+              exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
+            },
             include: [
               {
                 model: Category,
-                where: { id: { [Op.in]: categoryIds } },
-                attributes: [],
-                through: { attributes: [] },
+                as: "Category",
+                attributes: ["name"],
               },
             ],
-            group: ["Question.id"],
-            having: sequelize.where(
-              sequelize.fn("COUNT", sequelize.col("Categories.id")),
-              categoryIds.length
-            ),
           });
         } else {
           where.categories_id = categoryIds[0];
         }
       }
-
       if (difficulty) {
         if (!validDifficulties.includes(difficulty)) {
           return h
