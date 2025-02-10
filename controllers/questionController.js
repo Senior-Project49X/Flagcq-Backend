@@ -1192,19 +1192,55 @@ const questionController = {
         return acc;
       }, {});
 
-      mappedData = question.rows.map((q) => ({
-        id: q.id,
-        title: q.title,
-        point: q.point,
-        categories_name: q.Category?.name || null,
-        difficultys_id: q.difficultys_id,
-        mode: (() => {
-          if (q.Practice) return "Practice";
-          if (q.Tournament) return "Tournament";
-          return "Unpublished";
-        })(),
-        submitCount: submitCountMap[q.id] || 0,
-      }));
+      const submitCountTournament = await TournamentSubmited.findAll({
+        attributes: [
+          "question_tournament_id",
+          [sequelize.fn("COUNT", sequelize.col("id")), "submitCount"],
+        ],
+
+        group: ["question_tournament_id"],
+        raw: true,
+      });
+
+      const submitCountMapTournament = submitCountTournament.reduce(
+        (acc, curr) => {
+          acc[curr.question_tournament_id] = curr.submitCount;
+          return acc;
+        },
+        {}
+      );
+
+      const existingTournament = await QuestionTournament.findAll({
+        attributes: ["questions_id"],
+        distinct: true,
+      });
+
+      const questionIds = existingTournament.map((item) => item.questions_id);
+
+      mappedData = question.rows.map((q) => {
+        let mode = "Unpublished";
+        let submitCount = 0;
+        let is_selected = false;
+
+        if (q.Tournament) {
+          submitCount = submitCountMapTournament[q.id] || 0;
+          mode = "Tournament";
+          is_selected = questionIds.includes(q.id);
+        } else if (q.Practice) {
+          submitCount = submitCountMap[q.id] || 0;
+          mode = "Practice";
+        }
+        return {
+          id: q.id,
+          title: q.title,
+          point: q.point,
+          categories_name: q.Category?.name || null,
+          difficultys_id: q.difficultys_id,
+          mode: mode,
+          submitCount: submitCount,
+          is_selected: is_selected,
+        };
+      });
 
       totalPages = Math.ceil(question.count / limit);
       hasNextPage = parsedPage < totalPages;
@@ -1463,6 +1499,9 @@ const questionController = {
         await Hint.bulkCreate(newHints, { transaction });
       }
 
+      question.Practice = false;
+      question.Tournament = false;
+
       if (Practice) {
         if (Practice !== "true" && Practice !== "false") {
           return h
@@ -1470,7 +1509,6 @@ const questionController = {
             .code(400);
         } else if (Practice === "true") {
           question.Practice = true;
-          question.Tournament = false;
         }
       }
 
@@ -1480,7 +1518,6 @@ const questionController = {
             .response({ message: "Invalid value for Tournament" })
             .code(400);
         } else if (Tournament === "true") {
-          question.Practice = false;
           question.Tournament = true;
         }
       }
