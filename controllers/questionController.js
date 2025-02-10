@@ -1069,15 +1069,16 @@ const questionController = {
                 questionIds = existingQuestionIds.map(
                   (item) => item.questions_id
                 );
-              }
-              const existingQuestionIds = await QuestionTournament.findAll({
-                attributes: ["questions_id"],
-                distinct: true,
-              });
+              } else {
+                const existingQuestionIds = await QuestionTournament.findAll({
+                  attributes: ["questions_id"],
+                  distinct: true,
+                });
 
-              questionIds = existingQuestionIds.map(
-                (item) => item.questions_id
-              );
+                questionIds = existingQuestionIds.map(
+                  (item) => item.questions_id
+                );
+              }
 
               question = await Question.findAndCountAll({
                 where: {
