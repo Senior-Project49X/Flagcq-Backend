@@ -25,6 +25,13 @@ module.exports = {
         'Admin'
       );
     `);
+
+    await queryInterface.sequelize.query(`
+      CREATE TYPE "Mode" AS ENUM (
+        'Public',
+        'Private'
+      );
+    `);
   },
 
   down: async (queryInterface, Sequelize) => {

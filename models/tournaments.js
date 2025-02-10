@@ -36,6 +36,27 @@ module.exports = (sequelize) => {
         type: DataTypes.DATE,
         allowNull: false,
       },
+      mode: {
+        type: DataTypes.ENUM('Public', 'Private'),
+        allowNull: false,
+      },
+      teamSizeLimit: {
+        type: DataTypes.INTEGER,
+        allowNull: true, // Only applicable for public tournaments
+      },
+      teamLimit: {
+        type: DataTypes.INTEGER,
+        allowNull: true, // Only applicable for public tournaments
+      },
+      playerLimit: {
+        type: DataTypes.INTEGER,
+        allowNull: true, // Only applicable for private tournaments
+      },
+      joinCode: {
+        type: DataTypes.STRING(6),
+        allowNull: true, // Only applicable for private tournaments
+        unique: true,
+      },
     },
     {
       tableName: "Tournament",

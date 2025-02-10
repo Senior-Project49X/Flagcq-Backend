@@ -7,8 +7,40 @@ const { get } = require("http");
 const { v4: uuidv4 } = require('uuid'); // For generating unique codes
 
 const tournamentController = {
+
+  generatePrivateCode: () => {
+    const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let PrivateCode = "";
+    for (let i = 0; i < 6; i++) {
+      PrivateCode += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return PrivateCode;
+  },
+  
   createTournament: async (req, h) => {
     try {
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      let user = await User.findOne({
+        where: { itaccount: decoded.email },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      if (user.role !== "Admin") {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+      
       const {
         name,
         description,
@@ -16,81 +48,54 @@ const tournamentController = {
         enroll_endDate,
         event_startDate,
         event_endDate,
-        mode, // 'public' or 'private'
-        teamSizeLimit, // optional, only for public
-        teamLimit, // optional, only for public
-        playerLimit // optional, only for private
+        mode,
+        teamSizeLimit, // 1-4
+        limit // playerLimit if teamSizeLimit is 1, otherwise teamLimit
       } = req.payload;
-
-      // Check for duplicate name
+  
       const existingTournament = await Tournament.findOne({ where: { name } });
       if (existingTournament) {
-        return h
-          .response({
-            message: "Tournament name already exists",
-          })
-          .code(400);
+        return h.response({ message: "Tournament name already exists, Please change the tournament name." }).code(400);
       }
-
-      // Validate date sequence
+  
       const enrollStart = moment.tz(enroll_startDate, "Asia/Bangkok").utc().toDate();
       const enrollEnd = moment.tz(enroll_endDate, "Asia/Bangkok").utc().toDate();
       const eventStart = moment.tz(event_startDate, "Asia/Bangkok").utc().toDate();
       const eventEnd = moment.tz(event_endDate, "Asia/Bangkok").utc().toDate();
-
+  
       if (enrollStart >= enrollEnd) {
-        return h
-          .response({
-            message: "Enrollment start date must be before enrollment end date",
-          })
-          .code(400);
+        return h.response({ message: "Enrollment start date must be before enrollment end date" }).code(400);
       }
-
+  
       if (enrollEnd >= eventStart) {
-        return h
-          .response({
-            message: "Enrollment end date must be before event start date",
-          })
-          .code(400);
+        return h.response({ message: "Enrollment end date must be before event start date" }).code(400);
       }
-
+  
       if (eventStart >= eventEnd) {
-        return h
-          .response({
-            message: "Event start date must be before event end date",
-          })
-          .code(400);
+        return h.response({ message: "Event start date must be before event end date" }).code(400);
+      }
+  
+      if (!teamSizeLimit || ![1, 2, 3, 4].includes(teamSizeLimit)) {
+        return h.response({ message: "Team size limit must be 1 to 4" }).code(400);
+      }
+  
+      const isUniqueCode = async (code) => {
+        const existingCode = await Tournament.findOne({ where: { joinCode: code } });
+        return !existingCode;
+      };
+  
+      // Generate join code only for private tournaments
+      let joinCode = null;
+      if (mode.toLowerCase() === 'private') {
+        joinCode = tournamentController.generatePrivateCode();
+        while (!await isUniqueCode(joinCode)) {
+          joinCode = tournamentController.generatePrivateCode();
+        }
       }
 
-      // Additional validation
-      if (mode === 'public') {
-        if (!teamSizeLimit || ![2, 3, 4].includes(teamSizeLimit)) {
-          return h
-            .response({
-              message: "Team size limit must be 2, 3, or 4 for public tournaments",
-            })
-            .code(400);
-        }
-      } else if (mode === 'private') {
-        if (!playerLimit || playerLimit <= 0) {
-          return h
-            .response({
-              message: "Player limit must be provided for private tournaments",
-            })
-            .code(400);
-        }
-      } else {
-        return h
-          .response({
-            message: "Invalid mode. Choose either 'public' or 'private'.",
-          })
-          .code(400);
-      }
-
-      // Generate a join code for private tournaments
-      const joinCode = mode === 'private' ? uuidv4() : null;
-
-      // Create the tournament
+      const playerLimit = teamSizeLimit === 1 ? limit : teamSizeLimit * limit;
+      const teamLimit = teamSizeLimit === 1 ? limit : limit;
+  
       const newTournament = await Tournament.create({
         name,
         description,
@@ -99,26 +104,16 @@ const tournamentController = {
         event_startDate: eventStart,
         event_endDate: eventEnd,
         mode,
-        teamSizeLimit: mode === 'public' ? teamSizeLimit : null,
-        teamLimit: mode === 'public' ? teamLimit : null,
-        playerLimit: mode === 'private' ? playerLimit : null,
+        teamSizeLimit,
+        playerLimit,
+        teamLimit,
         joinCode,
       });
-
-      return h
-        .response({
-          message: "Tournament created successfully",
-          tournament: newTournament,
-        })
-        .code(201);
+  
+      return h.response({ message: "Tournament created successfully", tournament: newTournament }).code(201);
     } catch (error) {
       console.error("Error creating tournament:", error);
-      return h
-        .response({
-          message: "Failed to create tournament",
-          error: error.message,
-        })
-        .code(500);
+      return h.response({ message: "Failed to create tournament", error: error.message }).code(500);
     }
   },
 
@@ -131,7 +126,7 @@ const tournamentController = {
           .response({ message: "Unauthorized: No token provided." })
           .code(401);
       }
-
+  
       let decoded;
       try {
         decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
@@ -140,8 +135,7 @@ const tournamentController = {
           .response({ message: "Unauthorized: Invalid token." })
           .code(401);
       }
-
-      // Retrieve user
+  
       const user = await User.findOne({
         where: {
           [Op.or]: [
@@ -150,21 +144,24 @@ const tournamentController = {
           ],
         },
       });
-
+  
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
       }
-
+  
       const userId = user.user_id;
       const parsedPage = parseInt(page, 10);
       if (isNaN(parsedPage) || parsedPage <= 0) {
         return h.response({ message: "Invalid page parameter" }).code(400);
       }
-
-      const limit = 4; // Number of tournaments per page
+  
+      const limit = 4;
       const offset = (parsedPage - 1) * limit;
-
+  
+      const modeFilter = user.role === 'Admin' ? {} : { mode: 'Public' };
+  
       const { count, rows: tournaments } = await Tournament.findAndCountAll({
+        where: modeFilter,
         include: {
           model: Team,
           attributes: ["id"],
@@ -180,13 +177,12 @@ const tournamentController = {
         offset,
         order: [["createdAt", "DESC"]],
       });
-
-      // Construct the response
+  
       const tournamentDetails = tournaments.map((tournament) => {
         const userTeam = (tournament.Teams || []).find(
           (team) => team.usersTeams && team.usersTeams.length > 0
         );
-
+  
         return {
           id: tournament.id,
           name: tournament.name,
@@ -195,6 +191,9 @@ const tournamentController = {
           enroll_endDate: tournament.enroll_endDate,
           event_startDate: tournament.event_startDate,
           event_endDate: tournament.event_endDate,
+          mode: tournament.mode, // Add mode to the response
+          teamLimit: tournament.teamLimit, // Add teamLimit to the response
+          playerLimit: tournament.playerLimit, // Add playerLimit to the response
           createdAt: tournament.createdAt,
           updatedAt: tournament.updatedAt,
           hasJoined: !!userTeam,
@@ -202,10 +201,10 @@ const tournamentController = {
           teamCount: tournament.Teams ? tournament.Teams.length : 0,
         };
       });
-
+  
       const totalPages = Math.ceil(count / limit);
       const hasNextPage = parsedPage < totalPages;
-
+  
       return h
         .response({
           currentPage: parsedPage,
