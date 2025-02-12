@@ -182,6 +182,7 @@ const tournamentController = {
         const userTeam = (tournament.Teams || []).find(
           (team) => team.usersTeams && team.usersTeams.length > 0
         );
+        const isPrivate = tournament.mode.toLowerCase() === 'private';
   
         return {
           id: tournament.id,
@@ -199,6 +200,7 @@ const tournamentController = {
           hasJoined: !!userTeam,
           teamId: userTeam ? userTeam.id : null,
           teamCount: tournament.Teams ? tournament.Teams.length : 0,
+          joinCode: isPrivate ? tournament.joinCode : null, // Conditional joinCode
         };
       });
   
@@ -299,9 +301,12 @@ const tournamentController = {
           enroll_endDate: tournament.enroll_endDate,
           event_startDate: tournament.event_startDate,
           event_endDate: tournament.event_endDate,
+          mode: tournament.mode, // Add mode to the response
+          teamLimit: tournament.teamLimit, // Add teamLimit to the response
+          playerLimit: tournament.playerLimit, // Add playerLimit to the response
           createdAt: tournament.createdAt,
           updatedAt: tournament.updatedAt,
-          hasJoined: true,
+          hasJoined: !!userTeam,
           teamId: userTeam ? userTeam.id : null,
           teamCount: tournament.Teams ? tournament.Teams.length : 0,
         };
