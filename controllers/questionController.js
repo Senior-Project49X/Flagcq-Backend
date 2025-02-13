@@ -516,10 +516,6 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
-      const secretKey = process.env.ANSWER_SECRET_KEY;
-
-      const decryptedAnswer = await decryptData(question.Answer, secretKey);
-
       const HintData = await Hint.findAll({
         where: { question_id: question.id },
         attributes: ["id", "Description", "point"],
@@ -550,6 +546,9 @@ const questionController = {
       });
 
       if (user.role === "Admin") {
+        const secretKey = process.env.ANSWER_SECRET_KEY;
+
+        const decryptedAnswer = await decryptData(question.Answer, secretKey);
         data = {
           id: question.id,
           title: question.title,
