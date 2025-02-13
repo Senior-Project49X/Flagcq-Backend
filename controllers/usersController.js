@@ -88,7 +88,6 @@ const usersController = {
 
       return h.response({ message: "Login successful" }).code(200);
     } catch (err) {
-      console.error(err);
       return h.response({ error: "Login failed" }).code(500);
     }
   },
@@ -103,7 +102,6 @@ const usersController = {
 
       return h.response({ message: "Logout successful" }).code(200);
     } catch (err) {
-      console.error(err);
       return h.response({ error: "Logout failed" }).code(500);
     }
   },
