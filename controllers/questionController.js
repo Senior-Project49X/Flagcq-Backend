@@ -684,34 +684,7 @@ const questionController = {
         }
 
         const categoryIds = categories.map((cat) => cat.id);
-
-        if (categoryIds.length > 1) {
-          question = await Question.findAndCountAll({
-            where: {
-              ...where,
-              categories_id: { [Op.in]: categoryIds },
-            },
-            limit: limit,
-            offset: offset,
-            order: [
-              ["difficultys_id", "ASC"],
-              ["categories_id", "ASC"],
-              ["id", "ASC"],
-            ],
-            attributes: {
-              exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
-            },
-            include: [
-              {
-                model: Category,
-                as: "Category",
-                attributes: ["name"],
-              },
-            ],
-          });
-        } else {
-          where.categories_id = categoryIds[0];
-        }
+        where.categories_id = { [Op.in]: categoryIds };
       }
       if (difficulty) {
         if (!validDifficulties.includes(difficulty)) {
@@ -1015,34 +988,7 @@ const questionController = {
         }
 
         const categoryIds = categories.map((cat) => cat.id);
-
-        if (categoryIds.length > 1) {
-          question = await Question.findAndCountAll({
-            where: {
-              ...where,
-              categories_id: { [Op.in]: categoryIds },
-            },
-            limit: limit,
-            offset: offset,
-            order: [
-              ["difficultys_id", "ASC"],
-              ["categories_id", "ASC"],
-              ["id", "ASC"],
-            ],
-            attributes: {
-              exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
-            },
-            include: [
-              {
-                model: Category,
-                as: "Category",
-                attributes: ["name"],
-              },
-            ],
-          });
-        } else {
-          where.categories_id = categoryIds[0];
-        }
+        where.categories_id = { [Op.in]: categoryIds };
       }
 
       if (difficulty) {
@@ -1764,13 +1710,8 @@ const questionController = {
       });
 
       if (existingTournament) {
-        await QuestionTournament.destroy({
-          where: { questions_id: question.id },
-          transaction,
-        });
-
         const existingTournamentSubmited = await TournamentSubmited.findAll({
-          where: { question_id: question.id },
+          where: { question_tournament_id: existingTournament.id },
           transaction,
         });
 
@@ -1778,12 +1719,23 @@ const questionController = {
           const TeamIds = existingTournamentSubmited.map(
             (item) => item.team_id
           );
+
           const UserIds = existingTournamentSubmited.map(
             (item) => item.users_id
           );
           await TeamScores.update(
-            { points: sequelize.literal("total_points - " + question.point) },
-            { where: { team_id: { [Op.in]: TeamIds } }, transaction }
+            {
+              total_points: sequelize.literal(
+                "total_points - " + question.point
+              ),
+            },
+            {
+              where: {
+                team_id: { [Op.in]: TeamIds },
+                tournament_id: existingTournament.tournament_id,
+              },
+              transaction,
+            }
           );
           await TournamentPoints.update(
             { points: sequelize.literal("points - " + question.point) },
@@ -1791,10 +1743,15 @@ const questionController = {
           );
 
           await TournamentSubmited.destroy({
-            where: { question_id: question.id },
+            where: { question_tournament_id: existingTournament.id },
             transaction,
           });
         }
+
+        await QuestionTournament.destroy({
+          where: { questions_id: question.id },
+          transaction,
+        });
       }
 
       await question.destroy({ transaction });
@@ -1803,6 +1760,8 @@ const questionController = {
       return h.response({ message: "Question has been deleted" }).code(200);
     } catch (error) {
       await transaction.rollback();
+      console.log("Error in deleteQuestion:", error.message);
+
       return h.response({ message: error.message }).code(500);
     }
   },
