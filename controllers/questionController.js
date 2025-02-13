@@ -368,10 +368,10 @@ const questionController = {
     const transaction = await sequelize.transaction();
     try {
       const { tournamentId, questionIds } = request.params;
+
       if (!questionIds) {
         return h.response({ message: "Missing question_id" }).code(400);
       }
-
       if (!tournamentId) {
         return h.response({ message: "Missing tournament_id" }).code(400);
       }
@@ -423,18 +423,14 @@ const questionController = {
           questions_id: parsedQuestionId,
           tournament_id: parsedTournamentId,
         },
-        include: [
-          {
-            model: Question,
-            as: "Question",
-          },
-        ],
-
+        include: [{ model: Question, as: "Question" }],
         transaction,
       });
 
-      if (!questions || questions.length === 0) {
-        return h.response({ message: "Question not found" }).code(404);
+      if (!questions) {
+        return h
+          .response({ message: "Question not found in tournament" })
+          .code(404);
       }
 
       const existingSubmission = await TournamentSubmited.findAll({
@@ -448,11 +444,11 @@ const questionController = {
       if (existingSubmission.length > 0) {
         const TeamIds = existingSubmission.map((item) => item.team_id);
         const UserIds = existingSubmission.map((item) => item.users_id);
+        const QuestionPoints = questions.Question.point;
+
         await TeamScores.update(
           {
-            total_points: sequelize.literal(
-              "total_points - " + questions.Question.point
-            ),
+            total_points: sequelize.literal(`total_points - ${QuestionPoints}`),
           },
           {
             where: {
@@ -462,13 +458,18 @@ const questionController = {
             transaction,
           }
         );
+
         await TournamentPoints.update(
-          { points: sequelize.literal("points - " + questions.Question.point) },
+          { points: sequelize.literal(`points - ${QuestionPoints}`) },
           { where: { users_id: { [Op.in]: UserIds } }, transaction }
         );
 
         await TournamentSubmited.destroy({
-          where: { question_tournament_id: existingSubmission.id },
+          where: {
+            question_tournament_id: {
+              [Op.in]: existingSubmission.map((s) => s.question_tournament_id),
+            },
+          },
           transaction,
         });
       }
@@ -486,10 +487,8 @@ const questionController = {
         .response({ message: "Question removed from tournament" })
         .code(200);
     } catch (error) {
-      if (transaction) {
-        await transaction.rollback();
-      }
-      console.error("Error deleting question from tournament:", error);
+      if (transaction) await transaction.rollback();
+
       return h.response({ message: error.message }).code(500);
     }
   },
