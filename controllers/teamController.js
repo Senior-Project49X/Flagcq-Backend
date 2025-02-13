@@ -75,8 +75,8 @@ const teamController = {
       if (currentTime.isAfter(tournament.enroll_endDate)) {
         return h.response({ message: "Enrollment period has ended." }).code(400);
       }
-      console.log(currentTime);
-      console.log(tournament.enroll_endDate);
+      // console.log(currentTime);
+      // console.log(tournament.enroll_endDate);
   
       // Check the mode of the tournament
       if (tournament.mode === 'Private') {
@@ -215,6 +215,20 @@ const teamController = {
             message: "A team with this name already exists in the tournament.",
           })
           .code(400);
+      }
+
+      const tournament = await Tournament.findOne({
+        where: { id: tournament_id },
+      });
+  
+      if (!tournament) {
+        return h.response({ message: "Tournament not found." }).code(404);
+      }
+
+      const existingTeamCount = await Team.count({ where: { tournament_id } });
+      console.log(existingTeamCount);
+      if (existingTeamCount >= tournament.teamLimit) {
+        return h.response({ message: "The team limit for this tournament has been reached." }).code(400);
       }
 
       // Create the team

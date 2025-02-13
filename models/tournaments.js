@@ -43,10 +43,12 @@ module.exports = (sequelize) => {
       teamSizeLimit: {
         type: DataTypes.INTEGER,
         allowNull: true, // Only applicable for public tournaments
+        defaultValue: 4, // Set default team limit
       },
       teamLimit: {
         type: DataTypes.INTEGER,
         allowNull: true, // Only applicable for public tournaments
+        defaultValue: 120, // Set default team limit
       },
       playerLimit: {
         type: DataTypes.INTEGER,
