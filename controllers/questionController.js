@@ -423,6 +423,13 @@ const questionController = {
           questions_id: parsedQuestionId,
           tournament_id: parsedTournamentId,
         },
+        include: [
+          {
+            model: Question,
+            as: "Question",
+          },
+        ],
+
         transaction,
       });
 
@@ -430,7 +437,7 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
-      const existingSubmission = await TournamentSubmited.findOne({
+      const existingSubmission = await TournamentSubmited.findAll({
         where: {
           question_tournament_id: questions.id,
           tournament_id: parsedTournamentId,
@@ -438,12 +445,32 @@ const questionController = {
         transaction,
       });
 
-      if (existingSubmission) {
-        return h
-          .response({
-            message: "Cannot delete question that has been submitted",
-          })
-          .code(400);
+      if (existingSubmission.length > 0) {
+        const TeamIds = existingSubmission.map((item) => item.team_id);
+        const UserIds = existingSubmission.map((item) => item.users_id);
+        await TeamScores.update(
+          {
+            total_points: sequelize.literal(
+              "total_points - " + questions.Question.point
+            ),
+          },
+          {
+            where: {
+              team_id: { [Op.in]: TeamIds },
+              tournament_id: parsedTournamentId,
+            },
+            transaction,
+          }
+        );
+        await TournamentPoints.update(
+          { points: sequelize.literal("points - " + questions.Question.point) },
+          { where: { users_id: { [Op.in]: UserIds } }, transaction }
+        );
+
+        await TournamentSubmited.destroy({
+          where: { question_tournament_id: existingSubmission.id },
+          transaction,
+        });
       }
 
       await QuestionTournament.destroy({
@@ -1297,9 +1324,11 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
       }
 
       const user = await User.findOne({
@@ -1704,14 +1733,21 @@ const questionController = {
         });
       }
 
-      const existingTournament = await QuestionTournament.findOne({
+      const existingTournaments = await QuestionTournament.findAll({
         where: { questions_id: question.id },
         transaction,
       });
 
-      if (existingTournament) {
+      if (existingTournaments.length > 0) {
+        const existingTournamentIds = existingTournaments.map(
+          (item) => item.id
+        );
         const existingTournamentSubmited = await TournamentSubmited.findAll({
-          where: { question_tournament_id: existingTournament.id },
+          where: {
+            question_tournament_id: {
+              [Op.in]: existingTournamentIds,
+            },
+          },
           transaction,
         });
 
@@ -1732,18 +1768,27 @@ const questionController = {
             {
               where: {
                 team_id: { [Op.in]: TeamIds },
-                tournament_id: existingTournament.tournament_id,
+                tournament_id: {
+                  [Op.in]: existingTournaments.map((t) => t.tournament_id),
+                },
               },
               transaction,
             }
           );
           await TournamentPoints.update(
-            { points: sequelize.literal("points - " + question.point) },
-            { where: { users_id: { [Op.in]: UserIds } }, transaction }
+            {
+              points: sequelize.literal("points - " + question.point),
+            },
+            {
+              where: { users_id: { [Op.in]: UserIds } },
+              transaction,
+            }
           );
 
           await TournamentSubmited.destroy({
-            where: { question_tournament_id: existingTournament.id },
+            where: {
+              question_tournament_id: { [Op.in]: existingTournamentIds },
+            },
             transaction,
           });
         }
@@ -1787,10 +1832,11 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        await transaction.rollback();
-        return h.response({ message: "Invalid token" }).code(401);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
       }
 
       const existingTournament = await QuestionTournament.findOne({
@@ -1916,9 +1962,11 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
       }
 
       const user = await User.findOne({
@@ -2034,9 +2082,21 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: {
+          itaccount: decoded.email,
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
       }
 
       const question = await Question.findByPk(questionId);
@@ -2089,9 +2149,11 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
       }
 
       const user = await User.findOne({
