@@ -21,7 +21,7 @@ const HintUsed = db.HintUsed;
 const Team = db.Team;
 const User_Team = db.Users_Team;
 const crypto = require("crypto");
-const { DateTime } = require("luxon");
+const moment = require("moment-timezone");
 const xss = require("xss");
 
 const questionController = {
@@ -580,7 +580,7 @@ const questionController = {
           where: { id: existingTournament.tournament_id },
         });
 
-        const currentTime = DateTime.now().setZone("Asia/Bangkok").toISO();
+        const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
 
         if (currentTime > validTime.event_endDate) {
           return h.response({ message: "Tournament has ended" }).code(400);
@@ -745,7 +745,8 @@ const questionController = {
               where: { id: parsedTournamentId },
             });
 
-            const currentTime = DateTime.now().setZone("Asia/Bangkok").toISO();
+            const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
+
             if (currentTime > validTime.event_endDate) {
               return h.response({ message: "Tournament has ended" }).code(400);
             }
@@ -777,10 +778,18 @@ const questionController = {
               }
 
               const TournamentSovled = await TournamentSubmited.findAll({
-                where: { team_id: Userteam.team.id },
+                where: { team_id: Userteam.team_id },
+                include: [
+                  {
+                    model: QuestionTournament,
+                    as: "QuestionTournament",
+                    attributes: ["questions_id"],
+                  },
+                ],
               });
+
               TournamentSovledIds = TournamentSovled.map(
-                (item) => item.question_id
+                (item) => item.QuestionTournament.questions_id
               );
             }
 

@@ -15,7 +15,6 @@
     "dotenv": "^16.4.5",
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
-    "luxon": "^3.5.0",
     "moment-timezone": "^0.5.47",
     "pg": "^8.13.3",
     "sequelize": "^6.37.5",
