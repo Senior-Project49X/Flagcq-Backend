@@ -21,6 +21,8 @@ const HintUsed = db.HintUsed;
 const Team = db.Team;
 const User_Team = db.Users_Team;
 const crypto = require("crypto");
+const moment = require("moment-timezone");
+const xss = require("xss");
 
 const questionController = {
   createQuestion: async (request, h) => {
@@ -63,6 +65,25 @@ const questionController = {
 
       const trimmedTitle = title.trim();
       const trimmedAnswer = Answer.trim();
+      if (trimmedTitle.length < 1) {
+        return h.response({ message: "Title cannot be empty" }).code(400);
+      }
+
+      if (trimmedAnswer.length < 1) {
+        return h.response({ message: "Answer cannot be empty" }).code(400);
+      }
+
+      const secretKey = process.env.ANSWER_SECRET_KEY;
+      if (!secretKey) {
+        return h.response({ message: "Server configuration error" }).code(500);
+      }
+
+      let encryptedAnswer;
+      try {
+        encryptedAnswer = await encryptData(trimmedAnswer, secretKey);
+      } catch (error) {
+        return h.response({ message: "Failed to encrypt answer" }).code(500);
+      }
 
       if (!validDifficulties.includes(difficultys_id)) {
         return h
@@ -81,6 +102,9 @@ const questionController = {
       } catch (err) {
         return h.response({ message: "Invalid or expired token" }).code(401);
       }
+
+      const sanitizedTitle = xss(trimmedTitle);
+      const sanitizedDescription = xss(Description);
 
       const user = await User.findOne({
         where: { itaccount: decoded.email },
@@ -173,9 +197,9 @@ const questionController = {
       const question = await Question.create(
         {
           categories_id: category.id,
-          title: trimmedTitle,
-          Description,
-          Answer: trimmedAnswer,
+          title: sanitizedTitle,
+          Description: sanitizedDescription,
+          Answer: encryptedAnswer,
           point: parsedPoint,
           difficultys_id,
           file_path,
@@ -202,13 +226,13 @@ const questionController = {
           );
         }
 
-        const newHints = ArrayHint.map((hint) => ({
+        const sanitizedHintDetail = ArrayHint.map((hint) => ({
           question_id: question.id,
-          Description: hint.detail,
+          Description: xss(hint.detail),
           point: hint.penalty,
         }));
 
-        const totalPenalty = newHints.reduce((sum, curr) => {
+        const totalPenalty = sanitizedHintDetail.reduce((sum, curr) => {
           const point = parseInt(curr.point, 10);
           if (isNaN(point) || point < 0) {
             throw new Error(`Invalid penalty format: ${curr.point}`);
@@ -220,7 +244,7 @@ const questionController = {
           throw new Error("Total penalty exceeds point");
         }
 
-        await Hint.bulkCreate(newHints, { transaction });
+        await Hint.bulkCreate(sanitizedHintDetail, { transaction });
       }
 
       await transaction.commit();
@@ -344,10 +368,10 @@ const questionController = {
     const transaction = await sequelize.transaction();
     try {
       const { tournamentId, questionIds } = request.params;
+
       if (!questionIds) {
         return h.response({ message: "Missing question_id" }).code(400);
       }
-
       if (!tournamentId) {
         return h.response({ message: "Missing tournament_id" }).code(400);
       }
@@ -399,14 +423,17 @@ const questionController = {
           questions_id: parsedQuestionId,
           tournament_id: parsedTournamentId,
         },
+        include: [{ model: Question, as: "Question" }],
         transaction,
       });
 
-      if (!questions || questions.length === 0) {
-        return h.response({ message: "Question not found" }).code(404);
+      if (!questions) {
+        return h
+          .response({ message: "Question not found in tournament" })
+          .code(404);
       }
 
-      const existingSubmission = await TournamentSubmited.findOne({
+      const existingSubmission = await TournamentSubmited.findAll({
         where: {
           question_tournament_id: questions.id,
           tournament_id: parsedTournamentId,
@@ -414,12 +441,37 @@ const questionController = {
         transaction,
       });
 
-      if (existingSubmission) {
-        return h
-          .response({
-            message: "Cannot delete question that has been submitted",
-          })
-          .code(400);
+      if (existingSubmission.length > 0) {
+        const TeamIds = existingSubmission.map((item) => item.team_id);
+        const UserIds = existingSubmission.map((item) => item.users_id);
+        const QuestionPoints = questions.Question.point;
+
+        await TeamScores.update(
+          {
+            total_points: sequelize.literal(`total_points - ${QuestionPoints}`),
+          },
+          {
+            where: {
+              team_id: { [Op.in]: TeamIds },
+              tournament_id: parsedTournamentId,
+            },
+            transaction,
+          }
+        );
+
+        await TournamentPoints.update(
+          { points: sequelize.literal(`points - ${QuestionPoints}`) },
+          { where: { users_id: { [Op.in]: UserIds } }, transaction }
+        );
+
+        await TournamentSubmited.destroy({
+          where: {
+            question_tournament_id: {
+              [Op.in]: existingSubmission.map((s) => s.question_tournament_id),
+            },
+          },
+          transaction,
+        });
       }
 
       await QuestionTournament.destroy({
@@ -435,10 +487,8 @@ const questionController = {
         .response({ message: "Question removed from tournament" })
         .code(200);
     } catch (error) {
-      if (transaction) {
-        await transaction.rollback();
-      }
-      console.error("Error deleting question from tournament:", error);
+      if (transaction) await transaction.rollback();
+
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -495,7 +545,7 @@ const questionController = {
       const HintData = await Hint.findAll({
         where: { question_id: question.id },
         attributes: ["id", "Description", "point"],
-        order: [["id", "DESC"]],
+        order: [["id", "ASC"]],
       });
 
       let hintWithUsed = [];
@@ -522,6 +572,9 @@ const questionController = {
       });
 
       if (user.role === "Admin") {
+        const secretKey = process.env.ANSWER_SECRET_KEY;
+
+        const decryptedAnswer = await decryptData(question.Answer, secretKey);
         data = {
           id: question.id,
           title: question.title,
@@ -531,7 +584,7 @@ const questionController = {
           categories_name: question.Category?.name,
           difficultys_id: question.difficultys_id,
           file_path: question.file_path,
-          answer: question.Answer,
+          answer: decryptedAnswer,
           author: question.createdBy,
           hints: HintData,
           mode: (() => {
@@ -542,6 +595,28 @@ const questionController = {
         };
 
         return h.response(data).code(200);
+      }
+
+      const existingTournament = await QuestionTournament.findOne({
+        where: { questions_id: question.id },
+      });
+
+      if (existingTournament) {
+        const validTime = await Tournaments.findOne({
+          where: { id: existingTournament.tournament_id },
+        });
+
+        const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
+
+        if (currentTime > validTime.event_endDate) {
+          return h.response({ message: "Tournament has ended" }).code(400);
+        }
+
+        if (currentTime < validTime.event_startDate) {
+          return h
+            .response({ message: "Tournament has not started" })
+            .code(400);
+        }
       }
 
       data = {
@@ -635,34 +710,7 @@ const questionController = {
         }
 
         const categoryIds = categories.map((cat) => cat.id);
-
-        if (categoryIds.length > 1) {
-          question = await Question.findAndCountAll({
-            where: {
-              ...where,
-              categories_id: { [Op.in]: categoryIds },
-            },
-            limit: limit,
-            offset: offset,
-            order: [
-              ["difficultys_id", "ASC"],
-              ["categories_id", "ASC"],
-              ["id", "ASC"],
-            ],
-            attributes: {
-              exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
-            },
-            include: [
-              {
-                model: Category,
-                as: "Category",
-                attributes: ["name"],
-              },
-            ],
-          });
-        } else {
-          where.categories_id = categoryIds[0];
-        }
+        where.categories_id = { [Op.in]: categoryIds };
       }
       if (difficulty) {
         if (!validDifficulties.includes(difficulty)) {
@@ -692,6 +740,22 @@ const questionController = {
               return h.response({ message: "Invalid tournament_id" }).code(400);
             }
 
+            const validTime = await Tournaments.findOne({
+              where: { id: parsedTournamentId },
+            });
+
+            const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
+
+            if (currentTime > validTime.event_endDate) {
+              return h.response({ message: "Tournament has ended" }).code(400);
+            }
+
+            if (currentTime < validTime.event_startDate) {
+              return h
+                .response({ message: "Tournament has not started" })
+                .code(400);
+            }
+
             let Userteam = null;
 
             if (user.role !== "Admin") {
@@ -713,10 +777,18 @@ const questionController = {
               }
 
               const TournamentSovled = await TournamentSubmited.findAll({
-                where: { team_id: Userteam.team.id },
+                where: { team_id: Userteam.team_id },
+                include: [
+                  {
+                    model: QuestionTournament,
+                    as: "QuestionTournament",
+                    attributes: ["questions_id"],
+                  },
+                ],
               });
+
               TournamentSovledIds = TournamentSovled.map(
-                (item) => item.question_id
+                (item) => item.QuestionTournament.questions_id
               );
             }
 
@@ -942,34 +1014,7 @@ const questionController = {
         }
 
         const categoryIds = categories.map((cat) => cat.id);
-
-        if (categoryIds.length > 1) {
-          question = await Question.findAndCountAll({
-            where: {
-              ...where,
-              categories_id: { [Op.in]: categoryIds },
-            },
-            limit: limit,
-            offset: offset,
-            order: [
-              ["difficultys_id", "ASC"],
-              ["categories_id", "ASC"],
-              ["id", "ASC"],
-            ],
-            attributes: {
-              exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
-            },
-            include: [
-              {
-                model: Category,
-                as: "Category",
-                attributes: ["name"],
-              },
-            ],
-          });
-        } else {
-          where.categories_id = categoryIds[0];
-        }
+        where.categories_id = { [Op.in]: categoryIds };
       }
 
       if (difficulty) {
@@ -1278,9 +1323,11 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
       }
 
       const user = await User.findOne({
@@ -1336,6 +1383,24 @@ const questionController = {
           .code(400);
       }
 
+      const existingTournamentSubmited = await TournamentSubmited.findOne({
+        attributes: ["id"],
+        include: [
+          {
+            model: QuestionTournament,
+            where: { questions_id: questionId },
+          },
+        ],
+      });
+
+      if (existingTournamentSubmited) {
+        return h
+          .response({
+            message: "Question has been submitted in tournament, cannot update",
+          })
+          .code(400);
+      }
+
       const existingHint = await Hint.findAll({
         where: { question_id: questionId },
       });
@@ -1345,7 +1410,7 @@ const questionController = {
         });
         if (existingHintUsed.length > 0) {
           return h
-            .response({ message: "Question has been used, cannot update" })
+            .response({ message: "Question has been used hint, cannot update" })
             .code(400);
         }
       }
@@ -1367,7 +1432,9 @@ const questionController = {
         if (existingTitle) {
           return h.response({ message: "Title already exists" }).code(409);
         }
-        question.title = trimmedTitle;
+
+        const sanitizedTitle = xss(trimmedTitle);
+        question.title = sanitizedTitle;
       }
 
       let file_path = question.file_path;
@@ -1450,10 +1517,15 @@ const questionController = {
         question.difficultys_id = difficultys_id;
       }
 
-      if (Description) question.Description = Description;
+      if (Description) {
+        const sanitizedDescription = xss(Description);
+        question.Description = sanitizedDescription;
+      }
       if (Answer) {
         const trimmedAnswer = Answer.trim();
-        question.Answer = trimmedAnswer;
+        const secretKey = process.env.ANSWER_SECRET_KEY;
+        const encryptedAnswer = await encryptData(trimmedAnswer, secretKey);
+        question.Answer = encryptedAnswer;
       }
 
       if (point) {
@@ -1464,46 +1536,52 @@ const questionController = {
         question.point = parsedPoint;
       }
 
-      if (ArrayHint && ArrayHint.length > 0 && ArrayHint.length <= 3) {
-        const hasInvalidHint = ArrayHint.some(
-          (hint) =>
-            !hint.detail ||
-            hint.penalty === undefined ||
-            hint.penalty === null ||
-            hint.penalty < 0 ||
-            isNaN(hint.penalty)
-        );
-
-        if (hasInvalidHint) {
-          throw new Error(
-            "Invalid hint format. Hint must have detail and penalty"
-          );
-        }
-
-        const newHints = ArrayHint.map((hint) => ({
-          question_id: question.id,
-          Description: hint.detail,
-          point: hint.penalty,
-        }));
-
-        const totalPenalty = newHints.reduce((sum, curr) => {
-          const point = parseInt(curr.point, 10);
-          if (isNaN(point) || point < 0) {
-            throw new Error(`Invalid penalty format: ${curr.point}`);
-          }
-          return sum + point;
-        }, 0);
-
-        if (totalPenalty > question.point) {
-          throw new Error("Total penalty exceeds point");
-        }
-
+      if (ArrayHint !== undefined) {
         await Hint.destroy({
           where: { question_id: question.id },
           transaction,
         });
 
-        await Hint.bulkCreate(newHints, { transaction });
+        if (ArrayHint.length > 0) {
+          if (ArrayHint.length > 3) {
+            throw new Error("Maximum 3 hints allowed");
+          }
+
+          const hasInvalidHint = ArrayHint.some(
+            (hint) =>
+              !hint.detail ||
+              hint.penalty === undefined ||
+              hint.penalty === null ||
+              hint.penalty < 0 ||
+              isNaN(hint.penalty)
+          );
+
+          if (hasInvalidHint) {
+            throw new Error(
+              "Invalid hint format. Hint must have detail and penalty"
+            );
+          }
+
+          const sanitizedHint = ArrayHint.map((hint) => ({
+            question_id: question.id,
+            Description: xss(hint.detail),
+            point: hint.penalty,
+          }));
+
+          const totalPenalty = sanitizedHint.reduce((sum, curr) => {
+            const point = parseInt(curr.point, 10);
+            if (isNaN(point) || point < 0) {
+              throw new Error(`Invalid penalty format: ${curr.point}`);
+            }
+            return sum + point;
+          }, 0);
+
+          if (totalPenalty > question.point) {
+            throw new Error("Total penalty exceeds point");
+          }
+
+          await Hint.bulkCreate(sanitizedHint, { transaction });
+        }
       }
 
       question.Practice = false;
@@ -1654,19 +1732,21 @@ const questionController = {
         });
       }
 
-      const existingTournament = await QuestionTournament.findOne({
+      const existingTournaments = await QuestionTournament.findAll({
         where: { questions_id: question.id },
         transaction,
       });
 
-      if (existingTournament) {
-        await QuestionTournament.destroy({
-          where: { questions_id: question.id },
-          transaction,
-        });
-
+      if (existingTournaments.length > 0) {
+        const existingTournamentIds = existingTournaments.map(
+          (item) => item.id
+        );
         const existingTournamentSubmited = await TournamentSubmited.findAll({
-          where: { question_id: question.id },
+          where: {
+            question_tournament_id: {
+              [Op.in]: existingTournamentIds,
+            },
+          },
           transaction,
         });
 
@@ -1674,23 +1754,48 @@ const questionController = {
           const TeamIds = existingTournamentSubmited.map(
             (item) => item.team_id
           );
+
           const UserIds = existingTournamentSubmited.map(
             (item) => item.users_id
           );
           await TeamScores.update(
-            { points: sequelize.literal("total_points - " + question.point) },
-            { where: { team_id: { [Op.in]: TeamIds } }, transaction }
+            {
+              total_points: sequelize.literal(
+                "total_points - " + question.point
+              ),
+            },
+            {
+              where: {
+                team_id: { [Op.in]: TeamIds },
+                tournament_id: {
+                  [Op.in]: existingTournaments.map((t) => t.tournament_id),
+                },
+              },
+              transaction,
+            }
           );
           await TournamentPoints.update(
-            { points: sequelize.literal("points - " + question.point) },
-            { where: { users_id: { [Op.in]: UserIds } }, transaction }
+            {
+              points: sequelize.literal("points - " + question.point),
+            },
+            {
+              where: { users_id: { [Op.in]: UserIds } },
+              transaction,
+            }
           );
 
           await TournamentSubmited.destroy({
-            where: { question_id: question.id },
+            where: {
+              question_tournament_id: { [Op.in]: existingTournamentIds },
+            },
             transaction,
           });
         }
+
+        await QuestionTournament.destroy({
+          where: { questions_id: question.id },
+          transaction,
+        });
       }
 
       await question.destroy({ transaction });
@@ -1699,7 +1804,8 @@ const questionController = {
       return h.response({ message: "Question has been deleted" }).code(200);
     } catch (error) {
       await transaction.rollback();
-      console.log(error.message);
+      console.log("Error in deleteQuestion:", error.message);
+
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -1725,10 +1831,11 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        await transaction.rollback();
-        return h.response({ message: "Invalid token" }).code(401);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
       }
 
       const existingTournament = await QuestionTournament.findOne({
@@ -1742,8 +1849,15 @@ const questionController = {
           .code(400);
       }
 
-      const answer = "CTFCQ{" + question.Answer + "}";
-      if (answer === Answer) {
+      const secretKeyForAnswer = process.env.ANSWER_SECRET_KEY;
+      const decryptedAnswer = await decryptData(
+        question.Answer,
+        secretKeyForAnswer
+      );
+
+      const correctAnswer = `CTFCQ{${decryptedAnswer}}`;
+
+      if (correctAnswer === Answer) {
         const user = await User.findOne({
           where: {
             itaccount: decoded.email,
@@ -1847,9 +1961,11 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
       }
 
       const user = await User.findOne({
@@ -1863,19 +1979,13 @@ const questionController = {
         return h.response({ message: "User not found" }).code(404);
       }
 
-      const correctAnswer = question.Question.Answer;
       const secretKeyForAnswer = process.env.ANSWER_SECRET_KEY;
-      const hashCorrectAnswer = crypto
-        .createHmac("sha256", secretKeyForAnswer)
-        .update(correctAnswer)
-        .digest("hex");
+      const correctAnswer = await decryptData(
+        question.Question.Answer,
+        secretKeyForAnswer
+      );
 
-      const hashUserAnswer = crypto
-        .createHmac("sha256", secretKeyForAnswer)
-        .update(Answer)
-        .digest("hex");
-
-      if (hashCorrectAnswer === hashUserAnswer) {
+      if (Answer === correctAnswer) {
         if (user.role === "Admin") {
           await transaction.commit();
           return h.response({ message: "Correct", solve: true }).code(200);
@@ -1971,9 +2081,21 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: {
+          itaccount: decoded.email,
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
       }
 
       const question = await Question.findByPk(questionId);
@@ -2003,7 +2125,6 @@ const questionController = {
         },
       });
     } catch (error) {
-      console.log(error);
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -2027,9 +2148,11 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid or expired token" }).code(401);
       }
 
       const user = await User.findOne({
@@ -2084,5 +2207,47 @@ const questionController = {
     }
   },
 };
+
+async function encryptData(text, secretKey) {
+  const key = await getHashedKey(secretKey);
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+
+  let encrypted = cipher.update(text);
+  encrypted = Buffer.concat([encrypted, cipher.final()]);
+
+  const tag = cipher.getAuthTag();
+  return `${iv.toString("hex")}:${encrypted.toString("hex")}:${tag.toString(
+    "hex"
+  )}`;
+}
+
+async function decryptData(encryptedString, secretKey) {
+  const textParts = encryptedString.split(":");
+
+  const iv = Buffer.from(textParts.shift(), "hex");
+
+  const encryptedText = Buffer.from(textParts.shift(), "hex");
+
+  const authTag = Buffer.from(textParts.shift(), "hex");
+
+  const key = await getHashedKey(secretKey);
+
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(authTag);
+
+  let decrypted;
+  try {
+    decrypted = decipher.update(encryptedText);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    return decrypted.toString();
+  } catch (error) {
+    return new Error("Decryption failed ");
+  }
+}
+
+async function getHashedKey(text) {
+  return crypto.createHash("sha256").update(text).digest();
+}
 
 module.exports = questionController;
