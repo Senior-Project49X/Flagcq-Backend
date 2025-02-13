@@ -4,19 +4,20 @@ const { Op, where } = require("sequelize");
 const jwt = require("jsonwebtoken");
 const moment = require("moment-timezone");
 const { get } = require("http");
-const { v4: uuidv4 } = require('uuid'); // For generating unique codes
+const { v4: uuidv4 } = require("uuid"); // For generating unique codes
 
 const tournamentController = {
-
   generatePrivateCode: () => {
     const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     let PrivateCode = "";
     for (let i = 0; i < 6; i++) {
-      PrivateCode += characters.charAt(Math.floor(Math.random() * characters.length));
+      PrivateCode += characters.charAt(
+        Math.floor(Math.random() * characters.length)
+      );
     }
     return PrivateCode;
   },
-  
+
   createTournament: async (req, h) => {
     try {
       const token = req.state["cmu-oauth-token"];
@@ -40,7 +41,7 @@ const tournamentController = {
       if (user.role !== "Admin") {
         return h.response({ message: "Unauthorized" }).code(401);
       }
-      
+
       const {
         name,
         description,
@@ -50,52 +51,82 @@ const tournamentController = {
         event_endDate,
         mode,
         teamSizeLimit, // 1-4
-        limit // playerLimit if teamSizeLimit is 1, otherwise teamLimit
+        limit, // playerLimit if teamSizeLimit is 1, otherwise teamLimit
       } = req.payload;
-  
+
       const existingTournament = await Tournament.findOne({ where: { name } });
       if (existingTournament) {
-        return h.response({ message: "Tournament name already exists, Please change the tournament name." }).code(400);
+        return h
+          .response({
+            message:
+              "Tournament name already exists, Please change the tournament name.",
+          })
+          .code(400);
       }
-  
-      const enrollStart = moment.tz(enroll_startDate, "Asia/Bangkok").utc().toDate();
-      const enrollEnd = moment.tz(enroll_endDate, "Asia/Bangkok").utc().toDate();
-      const eventStart = moment.tz(event_startDate, "Asia/Bangkok").utc().toDate();
+
+      const enrollStart = moment
+        .tz(enroll_startDate, "Asia/Bangkok")
+        .utc()
+        .toDate();
+      const enrollEnd = moment
+        .tz(enroll_endDate, "Asia/Bangkok")
+        .utc()
+        .toDate();
+      const eventStart = moment
+        .tz(event_startDate, "Asia/Bangkok")
+        .utc()
+        .toDate();
       const eventEnd = moment.tz(event_endDate, "Asia/Bangkok").utc().toDate();
-  
+
       if (enrollStart >= enrollEnd) {
-        return h.response({ message: "Enrollment start date must be before enrollment end date" }).code(400);
+        return h
+          .response({
+            message: "Enrollment start date must be before enrollment end date",
+          })
+          .code(400);
       }
-  
+
       if (enrollEnd >= eventStart) {
-        return h.response({ message: "Enrollment end date must be before event start date" }).code(400);
+        return h
+          .response({
+            message: "Enrollment end date must be before event start date",
+          })
+          .code(400);
       }
-  
+
       if (eventStart >= eventEnd) {
-        return h.response({ message: "Event start date must be before event end date" }).code(400);
+        return h
+          .response({
+            message: "Event start date must be before event end date",
+          })
+          .code(400);
       }
-  
+
       if (!teamSizeLimit || ![1, 2, 3, 4].includes(teamSizeLimit)) {
-        return h.response({ message: "Team size limit must be 1 to 4" }).code(400);
+        return h
+          .response({ message: "Team size limit must be 1 to 4" })
+          .code(400);
       }
-  
+
       const isUniqueCode = async (code) => {
-        const existingCode = await Tournament.findOne({ where: { joinCode: code } });
+        const existingCode = await Tournament.findOne({
+          where: { joinCode: code },
+        });
         return !existingCode;
       };
-  
+
       // Generate join code only for private tournaments
       let joinCode = null;
-      if (mode.toLowerCase() === 'private') {
+      if (mode.toLowerCase() === "private") {
         joinCode = tournamentController.generatePrivateCode();
-        while (!await isUniqueCode(joinCode)) {
+        while (!(await isUniqueCode(joinCode))) {
           joinCode = tournamentController.generatePrivateCode();
         }
       }
 
       const playerLimit = teamSizeLimit === 1 ? limit : teamSizeLimit * limit;
       const teamLimit = teamSizeLimit === 1 ? limit : limit;
-  
+
       const newTournament = await Tournament.create({
         name,
         description,
@@ -109,11 +140,21 @@ const tournamentController = {
         teamLimit,
         joinCode,
       });
-  
-      return h.response({ message: "Tournament created successfully", tournament: newTournament }).code(201);
+
+      return h
+        .response({
+          message: "Tournament created successfully",
+          tournament: newTournament,
+        })
+        .code(201);
     } catch (error) {
       console.error("Error creating tournament:", error);
-      return h.response({ message: "Failed to create tournament", error: error.message }).code(500);
+      return h
+        .response({
+          message: "Failed to create tournament",
+          error: error.message,
+        })
+        .code(500);
     }
   },
 
@@ -126,7 +167,7 @@ const tournamentController = {
           .response({ message: "Unauthorized: No token provided." })
           .code(401);
       }
-  
+
       let decoded;
       try {
         decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
@@ -135,7 +176,7 @@ const tournamentController = {
           .response({ message: "Unauthorized: Invalid token." })
           .code(401);
       }
-  
+
       const user = await User.findOne({
         where: {
           [Op.or]: [
@@ -144,76 +185,84 @@ const tournamentController = {
           ],
         },
       });
-  
+
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
       }
-  
+
       const userId = user.user_id;
       const parsedPage = parseInt(page, 10);
       if (isNaN(parsedPage) || parsedPage <= 0) {
         return h.response({ message: "Invalid page parameter" }).code(400);
       }
-  
+
       const limit = 4;
       const offset = (parsedPage - 1) * limit;
-  
-      const modeFilter = user.role === 'Admin' ? {} : { mode: 'Public' };
-  
+
+      // Find all tournaments
       const { count, rows: tournaments } = await Tournament.findAndCountAll({
-        where: modeFilter,
         include: {
           model: Team,
           attributes: ["id"],
           include: {
             model: Users_Team,
-            where: { users_id: userId },
-            attributes: ["team_id"],
             as: "usersTeams",
+            attributes: ["team_id"],
+            where: { users_id: userId },
             required: false,
           },
         },
         limit,
         offset,
         order: [["createdAt", "DESC"]],
+        distinct: true,
       });
-  
-      const tournamentDetails = tournaments.map((tournament) => {
-        const userTeam = (tournament.Teams || []).find(
-          (team) => team.usersTeams && team.usersTeams.length > 0
-        );
-        const isPrivate = tournament.mode.toLowerCase() === 'private';
-  
-        return {
-          id: tournament.id,
-          name: tournament.name,
-          description: tournament.description,
-          enroll_startDate: tournament.enroll_startDate,
-          enroll_endDate: tournament.enroll_endDate,
-          event_startDate: tournament.event_startDate,
-          event_endDate: tournament.event_endDate,
-          mode: tournament.mode, // Add mode to the response
-          teamLimit: tournament.teamLimit, // Add teamLimit to the response
-          playerLimit: tournament.playerLimit, // Add playerLimit to the response
-          createdAt: tournament.createdAt,
-          updatedAt: tournament.updatedAt,
-          hasJoined: !!userTeam,
-          teamId: userTeam ? userTeam.id : null,
-          teamCount: tournament.Teams ? tournament.Teams.length : 0,
-          joinCode: isPrivate ? tournament.joinCode : null, // Conditional joinCode
-        };
-      });
-  
+
+      const tournamentDetails = tournaments
+        .map((tournament) => {
+          const userTeam = (tournament.Teams || []).find(
+            (team) => team.usersTeams && team.usersTeams.length > 0
+          );
+          const isPrivate = tournament.mode.toLowerCase() === "private";
+
+          return {
+            id: tournament.id,
+            name: tournament.name,
+            description: tournament.description,
+            enroll_startDate: tournament.enroll_startDate,
+            enroll_endDate: tournament.enroll_endDate,
+            event_startDate: tournament.event_startDate,
+            event_endDate: tournament.event_endDate,
+            mode: tournament.mode,
+            teamLimit: tournament.teamLimit,
+            playerLimit: tournament.playerLimit,
+            createdAt: tournament.createdAt,
+            updatedAt: tournament.updatedAt,
+            hasJoined: !!userTeam,
+            teamId: userTeam ? userTeam.id : null,
+            teamCount: tournament.Teams ? tournament.Teams.length : 0,
+            joinCode: isPrivate ? tournament.joinCode : null,
+          };
+        })
+        .filter((tournament) => {
+          // Filter out private tournaments that the user hasn't joined, unless they're an admin
+          return (
+            tournament.mode === "Public" ||
+            tournament.hasJoined ||
+            user.role === "Admin"
+          );
+        });
+
       const totalPages = Math.ceil(count / limit);
       const hasNextPage = parsedPage < totalPages;
-  
+
       return h
         .response({
           currentPage: parsedPage,
           data: tournamentDetails,
           totalItems: count,
           totalPages: totalPages,
-          hasNextPage: hasNextPage,
+          hasNextPage,
         })
         .code(200);
     } catch (error) {
@@ -236,7 +285,7 @@ const tournamentController = {
           .response({ message: "Unauthorized: No token provided." })
           .code(401);
       }
-  
+
       let decoded;
       try {
         decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
@@ -245,7 +294,7 @@ const tournamentController = {
           .response({ message: "Unauthorized: Invalid token." })
           .code(401);
       }
-  
+
       // Retrieve user
       const user = await User.findOne({
         where: {
@@ -255,20 +304,20 @@ const tournamentController = {
           ],
         },
       });
-  
+
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
       }
-  
+
       const userId = user.user_id;
       const parsedPage = parseInt(page, 10);
       if (isNaN(parsedPage) || parsedPage <= 0) {
         return h.response({ message: "Invalid page parameter" }).code(400);
       }
-  
+
       const limit = 4; // Number of tournaments per page
       const offset = (parsedPage - 1) * limit;
-  
+
       // Find tournaments joined by the user
       const { count, rows: tournaments } = await Tournament.findAndCountAll({
         include: {
@@ -287,12 +336,14 @@ const tournamentController = {
         order: [["createdAt", "DESC"]],
         distinct: true,
       });
-  
+
       // Construct the response
       const tournamentDetails = tournaments.map((tournament) => {
         // Find the user's team for this tournament
-        const userTeam = tournament.Teams.find(team => team.usersTeams.length > 0);
-  
+        const userTeam = tournament.Teams.find(
+          (team) => team.usersTeams.length > 0
+        );
+
         return {
           id: tournament.id,
           name: tournament.name,
@@ -311,10 +362,10 @@ const tournamentController = {
           teamCount: tournament.Teams ? tournament.Teams.length : 0,
         };
       });
-  
+
       const totalPages = Math.ceil(count / limit);
       const hasNextPage = parsedPage < totalPages;
-  
+
       return h
         .response({
           currentPage: parsedPage,
@@ -513,11 +564,11 @@ const tournamentController = {
   getAllInfoInTournament: async (req, h) => {
     try {
       const { tournament_id } = req.params;
-  
+
       if (!tournament_id) {
         return h.response({ message: "Tournament ID is required." }).code(400);
       }
-  
+
       // Fetch the leaderboard to determine ranks
       const leaderboard = await TeamScores.findAll({
         where: { tournament_id }, // Filter by tournament_id
@@ -534,13 +585,13 @@ const tournamentController = {
           },
         ],
       });
-  
+
       // Map team ID to their rank
       const rankMap = {};
       leaderboard.forEach((entry, index) => {
         rankMap[entry.team_id] = index + 1; // Assign rank starting from 1
       });
-  
+
       // Fetch teams with their scores and members
       const teams = await Team.findAll({
         where: { tournament_id },
@@ -574,12 +625,12 @@ const tournamentController = {
           },
         ],
       });
-  
+
       // Map and structure the response
       const response = teams.map((team) => {
         // Assuming each team will have only one TeamScores record associated with it
         const totalPoints = team.TeamScores[0]?.total_points || 0;
-  
+
         const members = team.usersTeams.map((member, index) => ({
           userId: member.user.user_id,
           isLeader: index === 0,
@@ -587,7 +638,7 @@ const tournamentController = {
           lastName: member.user.last_name,
           individualScore: member.user.tournamentPoints[0]?.points || 0,
         }));
-  
+
         return {
           teamID: team.id,
           teamName: team.name,
@@ -599,7 +650,7 @@ const tournamentController = {
 
       // Sort the response by rank
       response.sort((a, b) => a.rank - b.rank);
-    
+
       return h.response(response).code(200);
     } catch (error) {
       console.error("Error retrieving teams:", error.message);
