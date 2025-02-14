@@ -324,28 +324,24 @@ const tournamentController = {
         })
         .sort((a, b) => {
           const now = new Date();
-        
+          
           // Determine if each tournament is ongoing
           const aOngoing = new Date(a.event_endDate) > now;
           const bOngoing = new Date(b.event_endDate) > now;
         
-          if (a.hasJoined && b.hasJoined) {
-            // Both are joined
-            if (aOngoing && !bOngoing) return -1; // Ongoing first
-            if (!aOngoing && bOngoing) return 1;
-          }
-          
-          if (a.hasJoined) {
-            if (aOngoing) return -1; // Ongoing before others
-            return 1; // Ended joined tournaments last
-          }
+          // Priority 1: Joined and ongoing tournaments
+          if (a.hasJoined && aOngoing && !(b.hasJoined && bOngoing)) return -1;
+          if (b.hasJoined && bOngoing && !(a.hasJoined && aOngoing)) return 1;
         
-          if (b.hasJoined) {
-            if (bOngoing) return -1;
-            return 1;
-          }
+          // Priority 2: Not joined tournaments
+          if (!a.hasJoined && b.hasJoined) return -1;
+          if (!b.hasJoined && a.hasJoined) return 1;
         
-          // If neither are joined, sort by creation from newest to oldest
+          // Priority 3: Joined and ended tournaments
+          if (a.hasJoined && !aOngoing && (!b.hasJoined || bOngoing)) return 1;
+          if (b.hasJoined && !bOngoing && (!a.hasJoined || aOngoing)) return -1;
+        
+          // If both are in the same category, sort by creation date, newest first
           return new Date(b.createdAt) - new Date(a.createdAt);
         });
   
