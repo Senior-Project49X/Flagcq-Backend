@@ -324,24 +324,30 @@ const tournamentController = {
         })
         .sort((a, b) => {
           const now = new Date();
-          
-          // Determine if each tournament is ongoing
+        
           const aOngoing = new Date(a.event_endDate) > now;
           const bOngoing = new Date(b.event_endDate) > now;
+          
+          const aCanEnroll = new Date(a.enroll_endDate) > now;
+          const bCanEnroll = new Date(b.enroll_endDate) > now;
         
-          // Priority 1: Joined and ongoing tournaments
+          // 1. Ongoing and Joined
           if (a.hasJoined && aOngoing && !(b.hasJoined && bOngoing)) return -1;
           if (b.hasJoined && bOngoing && !(a.hasJoined && aOngoing)) return 1;
         
-          // Priority 2: Not joined tournaments
-          if (!a.hasJoined && b.hasJoined) return -1;
-          if (!b.hasJoined && a.hasJoined) return 1;
+          // 2. Not Joined but Can Enroll
+          if (!a.hasJoined && aCanEnroll && !(b.hasJoined && bCanEnroll)) return -1;
+          if (!b.hasJoined && bCanEnroll && !(a.hasJoined && aCanEnroll)) return 1;
         
-          // Priority 3: Joined and ended tournaments
-          if (a.hasJoined && !aOngoing && (!b.hasJoined || bOngoing)) return 1;
-          if (b.hasJoined && !bOngoing && (!a.hasJoined || aOngoing)) return -1;
+          // 3. Ongoing and Not Joined
+          if (!a.hasJoined && aOngoing && !(b.hasJoined && bOngoing)) return -1;
+          if (!b.hasJoined && bOngoing && !(a.hasJoined && aOngoing)) return 1;
         
-          // If both are in the same category, sort by creation date, newest first
+          // 4. Joined but Ended
+          if (a.hasJoined && !aOngoing) return 1;
+          if (b.hasJoined && !bOngoing) return -1;
+        
+          // Default: Sort by creation date, newest first
           return new Date(b.createdAt) - new Date(a.createdAt);
         });
   
