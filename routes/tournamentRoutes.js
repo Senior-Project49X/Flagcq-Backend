@@ -11,6 +11,16 @@ const tournamentRoutes = [
     handler: tournamentController.createTournament,
   },
   {
+    method: "PUT", // Using PUT for updates
+    path: "/api/editTournament",
+    handler: tournamentController.editTournament,
+    options: {
+      description: "Edit a tournament",
+      notes: "Updates details of a tournament. Only admins can edit.",
+      tags: ["api", "tournaments"],
+    },
+  },
+  {
     method: "GET",
     path: "/api/tournaments",
     handler: tournamentController.getAllTournaments,
