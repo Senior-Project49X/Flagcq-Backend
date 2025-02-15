@@ -161,28 +161,32 @@ const tournamentController = {
   editTournament: async (req, h) => {
     try {
       const {
-        tournament_id, 
-        name, 
-        description, 
-        enroll_startDate, 
-        enroll_endDate, 
-        event_startDate, 
-        event_endDate, 
-        mode, 
-        teamLimit, 
-        playerLimit
+        tournament_id,
+        name,
+        description,
+        enroll_startDate,
+        enroll_endDate,
+        event_startDate,
+        event_endDate,
+        mode,
+        teamLimit,
+        playerLimit,
       } = req.payload;
       const token = req.state["cmu-oauth-token"];
 
       if (!token) {
-        return h.response({ message: "Unauthorized: No token provided." }).code(401);
+        return h
+          .response({ message: "Unauthorized: No token provided." })
+          .code(401);
       }
 
       let decoded;
       try {
         decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
       } catch (err) {
-        return h.response({ message: "Unauthorized: Invalid token." }).code(401);
+        return h
+          .response({ message: "Unauthorized: Invalid token." })
+          .code(401);
       }
 
       const user = await User.findOne({
@@ -198,8 +202,10 @@ const tournamentController = {
         return h.response({ message: "User not found." }).code(404);
       }
 
-      if (user.role !== 'Admin') {
-        return h.response({ message: "Forbidden: Only admins can edit tournaments." }).code(403);
+      if (user.role !== "Admin") {
+        return h
+          .response({ message: "Forbidden: Only admins can edit tournaments." })
+          .code(403);
       }
 
       const tournament = await Tournament.findByPk(tournament_id);
@@ -208,10 +214,18 @@ const tournamentController = {
       }
 
       // Convert dates to UTC+7
-      const enrollStartDateUTC7 = moment.tz(enroll_startDate, "Asia/Bangkok").toDate();
-      const enrollEndDateUTC7 = moment.tz(enroll_endDate, "Asia/Bangkok").toDate();
-      const eventStartDateUTC7 = moment.tz(event_startDate, "Asia/Bangkok").toDate();
-      const eventEndDateUTC7 = moment.tz(event_endDate, "Asia/Bangkok").toDate();
+      const enrollStartDateUTC7 = moment
+        .tz(enroll_startDate, "Asia/Bangkok")
+        .toDate();
+      const enrollEndDateUTC7 = moment
+        .tz(enroll_endDate, "Asia/Bangkok")
+        .toDate();
+      const eventStartDateUTC7 = moment
+        .tz(event_startDate, "Asia/Bangkok")
+        .toDate();
+      const eventEndDateUTC7 = moment
+        .tz(event_endDate, "Asia/Bangkok")
+        .toDate();
 
       await tournament.update({
         name,
@@ -222,16 +236,20 @@ const tournamentController = {
         event_endDate: eventEndDateUTC7,
         mode,
         teamLimit,
-        playerLimit
+        playerLimit,
       });
 
-      return h.response({ message: "Tournament updated successfully." }).code(200);
+      return h
+        .response({ message: "Tournament updated successfully." })
+        .code(200);
     } catch (error) {
       console.error("Error updating tournament:", error);
-      return h.response({
-        message: "Failed to update tournament",
-        error: error.message,
-      }).code(500);
+      return h
+        .response({
+          message: "Failed to update tournament",
+          error: error.message,
+        })
+        .code(500);
     }
   },
 
@@ -240,16 +258,20 @@ const tournamentController = {
       const { page = 1 } = req.query;
       const token = req.state["cmu-oauth-token"];
       if (!token) {
-        return h.response({ message: "Unauthorized: No token provided." }).code(401);
+        return h
+          .response({ message: "Unauthorized: No token provided." })
+          .code(401);
       }
-  
+
       let decoded;
       try {
         decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
       } catch (err) {
-        return h.response({ message: "Unauthorized: Invalid token." }).code(401);
+        return h
+          .response({ message: "Unauthorized: Invalid token." })
+          .code(401);
       }
-  
+
       const user = await User.findOne({
         where: {
           [Op.or]: [
@@ -258,20 +280,20 @@ const tournamentController = {
           ],
         },
       });
-  
+
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
       }
-  
+
       const userId = user.user_id;
       const parsedPage = parseInt(page, 10);
       if (isNaN(parsedPage) || parsedPage <= 0) {
         return h.response({ message: "Invalid page parameter" }).code(400);
       }
-  
+
       const limit = 4;
       const offset = (parsedPage - 1) * limit;
-  
+
       const { count, rows: tournaments } = await Tournament.findAndCountAll({
         include: {
           model: Team,
@@ -286,13 +308,13 @@ const tournamentController = {
         },
         distinct: true,
       });
-  
+
       let tournamentDetails = tournaments.map((tournament) => {
         const userTeam = (tournament.Teams || []).find(
           (team) => team.usersTeams && team.usersTeams.length > 0
         );
         const isPrivate = tournament.mode.toLowerCase() === "private";
-  
+
         return {
           id: tournament.id,
           name: tournament.name,
@@ -312,7 +334,7 @@ const tournamentController = {
           joinCode: isPrivate ? tournament.joinCode : null,
         };
       });
-  
+
       // Filtering logic
       tournamentDetails = tournamentDetails
         .filter((tournament) => {
@@ -324,49 +346,55 @@ const tournamentController = {
         })
         .sort((a, b) => {
           const now = new Date();
-        
+
           const aOngoing = new Date(a.event_endDate) > now;
           const bOngoing = new Date(b.event_endDate) > now;
-          
+
           const aCanEnroll = new Date(a.enroll_endDate) > now;
           const bCanEnroll = new Date(b.enroll_endDate) > now;
-        
+
           // 1. Ongoing and Joined
           if (a.hasJoined && aOngoing && !(b.hasJoined && bOngoing)) return -1;
           if (b.hasJoined && bOngoing && !(a.hasJoined && aOngoing)) return 1;
-        
+
           // 2. Not Joined but Can Enroll
-          if (!a.hasJoined && aCanEnroll && !(b.hasJoined && bCanEnroll)) return -1;
-          if (!b.hasJoined && bCanEnroll && !(a.hasJoined && aCanEnroll)) return 1;
-        
+          if (!a.hasJoined && aCanEnroll && !(b.hasJoined && bCanEnroll))
+            return -1;
+          if (!b.hasJoined && bCanEnroll && !(a.hasJoined && aCanEnroll))
+            return 1;
+
           // 3. Ongoing and Not Joined
           if (!a.hasJoined && aOngoing && !(b.hasJoined && bOngoing)) return -1;
           if (!b.hasJoined && bOngoing && !(a.hasJoined && aOngoing)) return 1;
-        
+
           // 4. Joined but Ended
           if (a.hasJoined && !aOngoing) return 1;
           if (b.hasJoined && !bOngoing) return -1;
-        
+
           // Default: Sort by creation date, newest first
           return new Date(b.createdAt) - new Date(a.createdAt);
         });
-  
+
       const totalPages = Math.ceil(tournamentDetails.length / limit);
       const paginatedData = tournamentDetails.slice(offset, offset + limit);
-  
-      return h.response({
-        currentPage: parsedPage,
-        data: paginatedData,
-        totalItems: tournamentDetails.length,
-        totalPages: totalPages,
-        hasNextPage: parsedPage < totalPages,
-      }).code(200);
+
+      return h
+        .response({
+          currentPage: parsedPage,
+          data: paginatedData,
+          totalItems: tournamentDetails.length,
+          totalPages: totalPages,
+          hasNextPage: parsedPage < totalPages,
+        })
+        .code(200);
     } catch (error) {
       console.error("Error fetching tournaments:", error);
-      return h.response({
-        message: "Failed to get tournaments",
-        error: error.message,
-      }).code(500);
+      return h
+        .response({
+          message: "Failed to get tournaments",
+          error: error.message,
+        })
+        .code(500);
     }
   },
 
@@ -795,6 +823,54 @@ const tournamentController = {
       return h
         .response({
           message: "Failed to get tournaments",
+          error: error.message,
+        })
+        .code(500);
+    }
+  },
+
+  getTournamentById: async (req, h) => {
+    try {
+      const parsedId = parseInt(req.params.id, 10);
+      if (isNaN(parsedId) || parsedId <= 0) {
+        return h.response({ message: "Invalid tournament ID" }).code(400);
+      }
+
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      } catch (err) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      const user = await User.findOne({
+        where: {
+          itaccount: decoded.email,
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      const tournament = await Tournament.findByPk(parsedId, {
+        attributes: { exclude: ["createdAt", "updatedAt"] },
+      });
+      if (!tournament) {
+        return h.response({ message: "Tournament not found" }).code(404);
+      }
+
+      return h.response(tournament).code(200);
+    } catch (error) {
+      console.error("Error fetching tournament:", error);
+      return h
+        .response({
+          message: "Failed to get tournament",
           error: error.message,
         })
         .code(500);
