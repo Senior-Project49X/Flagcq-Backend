@@ -101,6 +101,11 @@ const tournamentRoutes = [
     path: "/api/tournaments/list",
     handler: tournamentController.getAllTournamentList,
   },
+  {
+    method: "GET",
+    path: "/api/tournamentID/{id}",
+    handler: tournamentController.getTournamentById,
+  },
 ];
 
 module.exports = tournamentRoutes;
