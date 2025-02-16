@@ -169,26 +169,22 @@ const tournamentController = {
         event_startDate,
         event_endDate,
         mode,
-        teamLimit,
-        playerLimit,
+        teamSizeLimit,
+        limit,
       } = req.payload;
       const token = req.state["cmu-oauth-token"];
-
+  
       if (!token) {
-        return h
-          .response({ message: "Unauthorized: No token provided." })
-          .code(401);
+        return h.response({ message: "Unauthorized: No token provided." }).code(401);
       }
-
+  
       let decoded;
       try {
         decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
       } catch (err) {
-        return h
-          .response({ message: "Unauthorized: Invalid token." })
-          .code(401);
+        return h.response({ message: "Unauthorized: Invalid token." }).code(401);
       }
-
+  
       const user = await User.findOne({
         where: {
           [Op.or]: [
@@ -197,59 +193,62 @@ const tournamentController = {
           ],
         },
       });
-
+  
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
       }
-
+  
       if (user.role !== "Admin") {
-        return h
-          .response({ message: "Forbidden: Only admins can edit tournaments." })
-          .code(403);
+        return h.response({ message: "Forbidden: Only admins can edit tournaments." }).code(403);
       }
-
+  
       const tournament = await Tournament.findByPk(tournament_id);
       if (!tournament) {
         return h.response({ message: "Tournament not found." }).code(404);
       }
-
+  
       // Convert dates to UTC+7
-      const enrollStartDateUTC7 = moment
-        .tz(enroll_startDate, "Asia/Bangkok")
-        .toDate();
-      const enrollEndDateUTC7 = moment
-        .tz(enroll_endDate, "Asia/Bangkok")
-        .toDate();
-      const eventStartDateUTC7 = moment
-        .tz(event_startDate, "Asia/Bangkok")
-        .toDate();
-      const eventEndDateUTC7 = moment
-        .tz(event_endDate, "Asia/Bangkok")
-        .toDate();
-
+      const enrollStartDateUTC7 = moment.tz(enroll_startDate, "Asia/Bangkok").utc().toDate();
+      const enrollEndDateUTC7 = moment.tz(enroll_endDate, "Asia/Bangkok").utc().toDate();
+      const eventStartDateUTC7 = moment.tz(event_startDate, "Asia/Bangkok").utc().toDate();
+      const eventEndDateUTC7 = moment.tz(event_endDate, "Asia/Bangkok").utc().toDate();
+  
+      if (enrollStartDateUTC7 >= enrollEndDateUTC7) {
+        return h.response({ message: "Enrollment start date must be before enrollment end date" }).code(400);
+      }
+  
+      if (enrollEndDateUTC7 >= eventStartDateUTC7) {
+        return h.response({ message: "Enrollment end date must be before event start date" }).code(400);
+      }
+  
+      if (eventStartDateUTC7 >= eventEndDateUTC7) {
+        return h.response({ message: "Event start date must be before event end date" }).code(400);
+      }
+  
+      if (!teamSizeLimit || ![1, 2, 3, 4].includes(teamSizeLimit)) {
+        return h.response({ message: "Team size limit must be 1 to 4" }).code(400);
+      }
+  
+      const playerLimit = teamSizeLimit === 1 ? limit : teamSizeLimit * limit;
+      const teamLimit = teamSizeLimit === 1 ? limit : limit;
+  
       await tournament.update({
         name,
         description,
         enroll_startDate: enrollStartDateUTC7,
         enroll_endDate: enrollEndDateUTC7,
-        event_startDate: eventStartDateUTC7,
-        event_endDate: eventEndDateUTC7,
+        event_start_date: eventStartDateUTC7,
+        event_end_date: eventEndDateUTC7,
         mode,
-        teamLimit,
+        teamSizeLimit,
         playerLimit,
+        teamLimit,
       });
-
-      return h
-        .response({ message: "Tournament updated successfully." })
-        .code(200);
+  
+      return h.response({ message: "Tournament updated successfully." }).code(200);
     } catch (error) {
       console.error("Error updating tournament:", error);
-      return h
-        .response({
-          message: "Failed to update tournament",
-          error: error.message,
-        })
-        .code(500);
+      return h.response({ message: "Failed to update tournament", error: error.message }).code(500);
     }
   },
 

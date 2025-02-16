@@ -235,7 +235,7 @@ const teamController = {
       }
 
       const existingTeamCount = await Team.count({ where: { tournament_id } });
-      console.log(existingTeamCount);
+      // console.log(existingTeamCount);
       if (existingTeamCount >= tournament.teamLimit) {
         return h
           .response({
@@ -427,6 +427,21 @@ const teamController = {
             message: "User is already in a team for this tournament.",
           })
           .code(400);
+      }
+
+      const existingTeamMembership = await Users_Team.findOne({
+        include: [{
+          model: Team,
+          where: { tournament_id: team.tournament_id },
+          as: "team",
+        }],
+        where: { users_id: user_id }
+      });
+      
+      if (existingTeamMembership) {
+        return h.response({ 
+          message: "You are already a member of another team in this tournament." 
+        }).code(400);
       }
 
       // Check if the team has reached the limit
@@ -694,7 +709,7 @@ const teamController = {
           attributes: ["id"], // Assuming id is the team_id
         },
       });
-      console.log(userTeam);
+      // console.log(userTeam);
 
       if (!userTeam) {
         return h
@@ -705,7 +720,7 @@ const teamController = {
       }
 
       const teamId = userTeam.team_id;
-      console.log(teamId);
+      // console.log(teamId);
 
       // Find the leader of the team
       const leaderRecord = await Users_Team.findOne({
