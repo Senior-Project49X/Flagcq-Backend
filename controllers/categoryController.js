@@ -113,7 +113,7 @@ const categoryController = {
       const category = await Category.findByPk(categoryId);
       if (category) {
         await category.destroy();
-        return h.response().code(204);
+        return h.response({ message: "Category has been deleted" }).code(204);
       }
       return h.response({ error: "Category not found" }).code(404);
     } catch (error) {
