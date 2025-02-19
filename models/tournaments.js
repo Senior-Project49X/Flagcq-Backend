@@ -37,7 +37,7 @@ module.exports = (sequelize) => {
         allowNull: false,
       },
       mode: {
-        type: DataTypes.ENUM('Public', 'Private'),
+        type: DataTypes.ENUM("Public", "Private"),
         allowNull: false,
       },
       teamSizeLimit: {
@@ -72,6 +72,12 @@ module.exports = (sequelize) => {
       foreignKey: "tournament_id",
     });
     Tournament.hasMany(models.TeamScores, { foreignKey: "tournament_id" });
+    Tournament.hasMany(models.TournamentSubmited, {
+      foreignKey: "tournament_id",
+    });
+    Tournament.hasMany(models.QuestionTournament, {
+      foreignKey: "tournament_id",
+    });
   };
 
   return Tournament;

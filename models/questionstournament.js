@@ -38,6 +38,9 @@ module.exports = (sequelize) => {
     QuestionTournament.belongsTo(models.Tournament, {
       foreignKey: "tournament_id",
     });
+    QuestionTournament.hasMany(models.TournamentSubmited, {
+      foreignKey: "question_tournament_id",
+    });
   };
 
   return QuestionTournament;

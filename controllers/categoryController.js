@@ -35,7 +35,6 @@ const categoryController = {
       });
       return h.response(categories).code(200);
     } catch (error) {
-      console.error(error);
       return h.response({ error: "Unable to retrieve categories" }).code(500);
     }
   },
@@ -74,7 +73,6 @@ const categoryController = {
       const newCategory = await Category.create({ name });
       return h.response(newCategory).code(201);
     } catch (error) {
-      console.error(error);
       return h.response({ error: "Unable to create category" }).code(500);
     }
   },
@@ -117,7 +115,6 @@ const categoryController = {
       }
       return h.response({ error: "Category not found" }).code(404);
     } catch (error) {
-      console.error(error);
       return h.response({ error: "Unable to delete category" }).code(500);
     }
   },
@@ -156,7 +153,6 @@ const categoryController = {
       }
       return h.response({ error: "Category not found" }).code(404);
     } catch (error) {
-      console.error(error);
       return h.response({ error: "Unable to retrieve category" }).code(500);
     }
   },

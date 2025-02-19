@@ -64,6 +64,7 @@ module.exports = (sequelize) => {
   Question.associate = function (models) {
     Question.belongsTo(models.Category, { foreignKey: "categories_id" });
     Question.hasMany(models.Submited, { foreignKey: "question_id" });
+    Question.hasMany(models.QuestionTournament, { foreignKey: "questions_id" });
   };
 
   return Question;

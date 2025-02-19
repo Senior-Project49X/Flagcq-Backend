@@ -1,28 +1,56 @@
-"use strict";
-
-const db = require("../models");
-const jwt = require("jsonwebtoken");
+// Node.js built-in modules
 const fs = require("fs");
 const path = require("path");
-const Question = db.Question;
-const User = db.User;
-const Submited = db.Submited;
-const Point = db.Point;
-const Category = db.Category;
-const sequelize = db.sequelize;
-const { Op } = require("sequelize");
-const Tournaments = db.Tournament;
-const QuestionTournament = db.QuestionTournament;
-const TournamentSubmited = db.TournamentSubmited;
-const TournamentPoints = db.TournamentPoints;
-const TeamScores = db.TeamScores;
-const Hint = db.Hint;
-const HintUsed = db.HintUsed;
-const Team = db.Team;
-const User_Team = db.Users_Team;
 const crypto = require("crypto");
+
+// Third-party packages
+const jwt = require("jsonwebtoken");
+const { Op } = require("sequelize");
 const moment = require("moment-timezone");
 const xss = require("xss");
+
+// Database models
+const db = require("../models");
+const { log } = require("console");
+const {
+  Question,
+  User,
+  Submited,
+  Point,
+  Category,
+  Tournament: Tournaments,
+  QuestionTournament,
+  TournamentSubmited,
+  TournamentPoints,
+  TeamScores,
+  Hint,
+  HintUsed,
+  Team,
+  Users_Team: User_Team,
+  sequelize,
+} = db;
+
+// Sorting configuration
+const SORT_CONFIG = {
+  FIELDS: {
+    QuestionName: "title",
+    Sovled: "SolvedCount",
+    Difficulty: "difficultys_id",
+    Point: "point",
+  },
+  DEFAULT_ORDERS: {
+    TOURNAMENT: [
+      [{ model: Question, as: "Question" }, "difficultys_id", "ASC"],
+      [{ model: Question, as: "Question" }, "categories_id", "ASC"],
+      [{ model: Question, as: "Question" }, "id", "ASC"],
+    ],
+    PRACTICE: [
+      ["difficultys_id", "ASC"],
+      ["categories_id", "ASC"],
+      ["id", "ASC"],
+    ],
+  },
+};
 
 const questionController = {
   createQuestion: async (request, h) => {
@@ -96,19 +124,7 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const sanitizedTitle = xss(trimmedTitle);
-      const sanitizedDescription = xss(Description);
-
-      const user = await User.findOne({
-        where: { itaccount: decoded.email },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
@@ -117,6 +133,9 @@ const questionController = {
       if (user.role !== "Admin") {
         return h.response({ message: "Unauthorized" }).code(401);
       }
+
+      const sanitizedTitle = xss(trimmedTitle);
+      const sanitizedDescription = xss(Description);
 
       const existingTitle = await Question.findOne({
         where: { title: trimmedTitle },
@@ -165,7 +184,6 @@ const questionController = {
           );
           file_path = fileName;
         } catch (err) {
-          console.error("Error uploading file:", err);
           return h.response({ message: "Failed to upload file" }).code(500);
         }
       }
@@ -205,7 +223,7 @@ const questionController = {
           file_path,
           Practice: isPractice,
           Tournament: isTournament,
-          createdBy: `${decoded.first_name} ${decoded.last_name}`,
+          createdBy: `${user.first_name} ${user.last_name}`,
         },
         { transaction }
       );
@@ -253,7 +271,6 @@ const questionController = {
       if (transaction) {
         await transaction.rollback();
       }
-      console.error("Error creating question:", error);
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -293,16 +310,7 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: { itaccount: decoded.email },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
@@ -360,7 +368,6 @@ const questionController = {
       if (transaction) {
         await transaction.rollback();
       }
-      console.error("Error adding question to tournament:", error);
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -391,17 +398,7 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: { itaccount: decoded.email },
-      });
-
+      const user = await authenticateUser(token);
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
       }
@@ -505,18 +502,7 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
@@ -645,6 +631,8 @@ const questionController = {
         difficulty,
         mode,
         tournament_id,
+        sort,
+        sort_order,
       } = request.query;
 
       const token = request.state["cmu-oauth-token"];
@@ -652,18 +640,7 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
@@ -685,7 +662,6 @@ const questionController = {
       let hasNextPage = false;
       let mappedData = [];
       let TournamentSovledIds = [];
-      let submitCountMap = {};
 
       if (category) {
         const categoryNames = category.split(",").map((cat) => cat.trim());
@@ -798,11 +774,7 @@ const questionController = {
               where: { tournament_id: parsedTournamentId },
               limit: limit,
               offset: offset,
-              order: [
-                [{ model: Question, as: "Question" }, "difficultys_id", "ASC"],
-                [{ model: Question, as: "Question" }, "categories_id", "ASC"],
-                [{ model: Question, as: "Question" }, "id", "ASC"],
-              ],
+              order: await createSorting({ sort, sort_order, mode }),
               include: [
                 {
                   model: Question,
@@ -810,6 +782,20 @@ const questionController = {
                   where,
                   attributes: {
                     exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
+                    include: [
+                      [
+                        sequelize.literal(`(
+                        SELECT COUNT(*)
+                        FROM public."TournamentSubmited" AS TS
+                        JOIN public."QuestionTournaments" AS QT 
+                        ON TS.question_tournament_id = QT.id
+                        WHERE QT.questions_id = "Question".id 
+                        AND QT.tournament_id = ?
+                      )`),
+                        "SolvedCount",
+                      ],
+                      { replacements: [parsedTournamentId] },
+                    ],
                   },
                   include: [
                     {
@@ -822,21 +808,6 @@ const questionController = {
               ],
             });
 
-            const submitCounts = await TournamentSubmited.findAll({
-              attributes: [
-                "question_tournament_id",
-                [sequelize.fn("COUNT", sequelize.col("id")), "submitCount"],
-              ],
-              where: { tournament_id: parsedTournamentId },
-              group: ["question_tournament_id"],
-              raw: true,
-            });
-
-            submitCountMap = submitCounts.reduce((acc, curr) => {
-              acc[curr.question_tournament_id] = curr.submitCount;
-              return acc;
-            }, {});
-
             mappedData = question.rows.map((qt) => {
               const q = qt.Question || qt;
               return {
@@ -846,7 +817,7 @@ const questionController = {
                 categories_name: q.Category?.name,
                 difficultys_id: q.difficultys_id,
                 solved: TournamentSovledIds.includes(q.id),
-                submitCount: submitCountMap[q.id] || 0,
+                submitCount: parseInt(q.SolvedCount || "0", 10),
               };
             });
 
@@ -872,13 +843,19 @@ const questionController = {
         where,
         limit: limit,
         offset: offset,
-        order: [
-          ["difficultys_id", "ASC"],
-          ["categories_id", "ASC"],
-          ["id", "ASC"],
-        ],
+        order: await createSorting({ sort, sort_order, mode }),
         attributes: {
           exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
+          include: [
+            [
+              sequelize.literal(`(
+            SELECT COUNT(*) 
+            FROM public."Submited" AS Submited 
+            WHERE Submited.question_id = "Question".id
+            )`),
+              "SolvedCount",
+            ],
+          ],
         },
         include: [
           {
@@ -896,20 +873,6 @@ const questionController = {
 
       const solvedIds = solvedQuestions.map((item) => item.question_id);
 
-      const submitCounts = await Submited.findAll({
-        attributes: [
-          "question_id",
-          [sequelize.fn("COUNT", sequelize.col("id")), "submitCount"],
-        ],
-        group: ["question_id"],
-        raw: true,
-      });
-
-      submitCountMap = submitCounts.reduce((acc, curr) => {
-        acc[curr.question_id] = curr.submitCount;
-        return acc;
-      }, {});
-
       mappedData = question.rows.map((q) => ({
         id: q.id,
         title: q.title,
@@ -918,7 +881,7 @@ const questionController = {
         difficultys_id: q.difficultys_id,
         author: q.createdBy,
         solved: solvedIds.includes(q.id),
-        submitCount: submitCountMap[q.id] || 0,
+        submitCount: parseInt(q.SolvedCount || "0", 10),
       }));
 
       totalPages = Math.ceil(question.count / limit);
@@ -947,6 +910,8 @@ const questionController = {
         mode,
         tournament_id,
         tournament_selected,
+        sort,
+        sort_order,
       } = request.query;
 
       const token = request.state["cmu-oauth-token"];
@@ -954,18 +919,7 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
@@ -989,7 +943,6 @@ const questionController = {
       let totalPages = 0;
       let hasNextPage = false;
       let mappedData = [];
-      let submitCountMap = {};
 
       if (category) {
         const categoryNames = category.split(",").map((cat) => cat.trim());
@@ -1054,15 +1007,7 @@ const questionController = {
                 where: { tournament_id: parsedTournamentId },
                 limit: limit,
                 offset: offset,
-                order: [
-                  [
-                    { model: Question, as: "Question" },
-                    "difficultys_id",
-                    "ASC",
-                  ],
-                  [{ model: Question, as: "Question" }, "categories_id", "ASC"],
-                  [{ model: Question, as: "Question" }, "id", "ASC"],
-                ],
+                order: await createSorting({ sort, sort_order, mode }),
                 include: [
                   {
                     model: Question,
@@ -1075,6 +1020,20 @@ const questionController = {
                         "createdBy",
                         "updatedAt",
                       ],
+                      include: [
+                        [
+                          sequelize.literal(`(
+                        SELECT COUNT(*)
+                        FROM public."TournamentSubmited" AS TS
+                        JOIN public."QuestionTournaments" AS QT
+                        ON TS.question_tournament_id = QT.id
+                        WHERE QT.questions_id = "Question".id
+                        AND QT.tournament_id = ?
+                        )`),
+                          "SolvedCount",
+                        ],
+                        { replacements: [parsedTournamentId] },
+                      ],
                     },
                     include: [
                       {
@@ -1085,22 +1044,8 @@ const questionController = {
                     ],
                   },
                 ],
+                subQuery: false,
               });
-
-              const submitCounts = await TournamentSubmited.findAll({
-                attributes: [
-                  "question_tournament_id",
-                  [sequelize.fn("COUNT", sequelize.col("id")), "submitCount"],
-                ],
-                where: { tournament_id: parsedTournamentId },
-                group: ["question_tournament_id"],
-                raw: true,
-              });
-
-              submitCountMap = submitCounts.reduce((acc, curr) => {
-                acc[curr.question_tournament_id] = curr.submitCount;
-                return acc;
-              }, {});
             } else {
               if (tournament_selected) {
                 parsedTournamentSelected = parseInt(tournament_selected, 10);
@@ -1138,39 +1083,36 @@ const questionController = {
                   Tournament: true,
                   Practice: false,
                 },
-                limit: limit,
-                offset: offset,
-                order: [
-                  ["difficultys_id", "ASC"],
-                  ["categories_id", "ASC"],
-                  ["id", "ASC"],
-                ],
+                limit,
+                offset,
+                order: await createSorting({
+                  sort,
+                  sort_order,
+                  mode: "Practice",
+                }),
                 attributes: {
                   exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
+                  include: [
+                    [
+                      sequelize.literal(`(
+                        SELECT COUNT(*)
+                        FROM public."TournamentSubmited" AS TS
+                        JOIN public."QuestionTournaments" AS QT ON TS.question_tournament_id = QT.id
+                        WHERE QT.questions_id = "Question".id
+                      )`),
+                      "SolvedCount",
+                    ],
+                  ],
                 },
                 include: [
                   {
                     model: Category,
-                    as: "Category",
                     attributes: ["name"],
                   },
                 ],
+
+                subQuery: false,
               });
-
-              const submitCounts = await TournamentSubmited.findAll({
-                attributes: [
-                  "question_tournament_id",
-                  [sequelize.fn("COUNT", sequelize.col("id")), "submitCount"],
-                ],
-                group: ["question_tournament_id"],
-
-                raw: true,
-              });
-
-              submitCountMap = submitCounts.reduce((acc, curr) => {
-                acc[curr.question_tournament_id] = curr.submitCount;
-                return acc;
-              }, {});
             }
 
             mappedData = question.rows.map((qt) => {
@@ -1184,7 +1126,7 @@ const questionController = {
                 author: q.createdBy,
                 mode: "Tournament",
                 is_selected: questionIds.includes(q.id),
-                submitCount: submitCountMap[q.id] || 0,
+                submitCount: parseInt(q.SolvedCount || "0", 10),
               };
             });
 
@@ -1213,13 +1155,42 @@ const questionController = {
         where,
         limit: limit,
         offset: offset,
-        order: [
-          ["difficultys_id", "ASC"],
-          ["categories_id", "ASC"],
-          ["id", "ASC"],
-        ],
+        order: await createSorting({ sort, sort_order, mode }),
         attributes: {
           exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
+          include: [
+            [
+              sequelize.literal(`(
+          SELECT COUNT(*) 
+          FROM public."Submited" AS Submited 
+          WHERE Submited.question_id = "Question".id
+          )`),
+              "submitCount",
+            ],
+            [
+              sequelize.literal(`(
+          SELECT COUNT(*) 
+          FROM public."TournamentSubmited" AS TS
+          JOIN public."QuestionTournaments" AS QT ON TS.question_tournament_id = QT.id
+          WHERE QT.questions_id = "Question".id
+          )`),
+              "submitCountTournament",
+            ],
+            [
+              sequelize.literal(`(
+                SELECT COUNT(*) 
+                FROM (
+                  SELECT question_id as qid FROM public."Submited"
+                  UNION ALL
+                  SELECT QT.questions_id 
+                  FROM public."TournamentSubmited" AS TS
+                  JOIN public."QuestionTournaments" AS QT ON TS.question_tournament_id = QT.id
+                ) AS combined
+                WHERE combined.qid = "Question".id
+              )`),
+              "SolvedCount",
+            ],
+          ],
         },
         include: [
           {
@@ -1228,39 +1199,8 @@ const questionController = {
             attributes: ["name"],
           },
         ],
+        subQuery: false,
       });
-
-      const submitCounts = await Submited.findAll({
-        attributes: [
-          "question_id",
-          [sequelize.fn("COUNT", sequelize.col("id")), "submitCount"],
-        ],
-        group: ["question_id"],
-        raw: true,
-      });
-
-      submitCountMap = submitCounts.reduce((acc, curr) => {
-        acc[curr.question_id] = curr.submitCount;
-        return acc;
-      }, {});
-
-      const submitCountTournament = await TournamentSubmited.findAll({
-        attributes: [
-          "question_tournament_id",
-          [sequelize.fn("COUNT", sequelize.col("id")), "submitCount"],
-        ],
-
-        group: ["question_tournament_id"],
-        raw: true,
-      });
-
-      const submitCountMapTournament = submitCountTournament.reduce(
-        (acc, curr) => {
-          acc[curr.question_tournament_id] = curr.submitCount;
-          return acc;
-        },
-        {}
-      );
 
       const existingTournament = await QuestionTournament.findAll({
         attributes: ["questions_id"],
@@ -1275,11 +1215,11 @@ const questionController = {
         let is_selected = false;
 
         if (q.Tournament) {
-          submitCount = submitCountMapTournament[q.id] || 0;
+          submitCount = parseInt(q.submitCountTournament || "0", 10);
           mode = "Tournament";
           is_selected = questionIds.includes(q.id);
         } else if (q.Practice) {
-          submitCount = submitCountMap[q.id] || 0;
+          submitCount = parseInt(q.submitCount || "0", 10);
           mode = "Practice";
         }
         return {
@@ -1323,17 +1263,7 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: { itaccount: decoded.email },
-      });
-
+      const user = await authenticateUser(token);
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
       }
@@ -1490,7 +1420,6 @@ const questionController = {
           );
           file_path = fileName;
         } catch (err) {
-          console.error("Error uploading file:", err);
           return h.response({ message: "Failed to upload file" }).code(500);
         }
       }
@@ -1616,7 +1545,6 @@ const questionController = {
       return h.response(question).code(200);
     } catch (error) {
       if (transaction) await transaction.rollback();
-      console.error("Error in updateQuestion:", error.message);
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -1633,19 +1561,7 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-
-      const user = await User.findOne(
-        {
-          where: { itaccount: decoded.email },
-        },
-        { transaction }
-      );
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
@@ -1673,7 +1589,6 @@ const questionController = {
           await fs.promises.unlink(filePath);
         } catch (err) {
           if (err.code !== "ENOENT") {
-            console.error("Error deleting file:", err);
             return h
               .response({ message: "Failed to delete associated file" })
               .code(500);
@@ -1804,7 +1719,6 @@ const questionController = {
       return h.response({ message: "Question has been deleted" }).code(200);
     } catch (error) {
       await transaction.rollback();
-      console.log("Error in deleteQuestion:", error.message);
 
       return h.response({ message: error.message }).code(500);
     }
@@ -1831,11 +1745,10 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
+      const user = await authenticateUser(token);
+      if (!user) {
+        await transaction.rollback();
+        return h.response({ message: "User not found" }).code(404);
       }
 
       const existingTournament = await QuestionTournament.findOne({
@@ -1858,18 +1771,6 @@ const questionController = {
       const correctAnswer = `CTFCQ{${decryptedAnswer}}`;
 
       if (correctAnswer === Answer) {
-        const user = await User.findOne({
-          where: {
-            itaccount: decoded.email,
-          },
-          transaction,
-        });
-
-        if (!user) {
-          await transaction.rollback();
-          return h.response({ message: "User not found" }).code(404);
-        }
-
         let point = await Point.findOne({
           where: { users_id: user.user_id },
           transaction,
@@ -1913,7 +1814,6 @@ const questionController = {
         return h.response({ message: "Incorrect", solve: false }).code(200);
       }
     } catch (err) {
-      console.error(err);
       await transaction.rollback();
       return h.response({ message: "Internal Server Error" }).code(500);
     }
@@ -1961,20 +1861,7 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-        transaction,
-      });
-
+      const user = await authenticateUser(token);
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
       }
@@ -2064,7 +1951,6 @@ const questionController = {
         return h.response({ message: "Incorrect", solve: false }).code(200);
       }
     } catch (err) {
-      console.error(err);
       await transaction.rollback();
       return h.response({ message: "Internal Server Error" }).code(500);
     }
@@ -2081,19 +1967,7 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
-
+      const user = await authenticateUser(token);
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
       }
@@ -2148,19 +2022,7 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
-
+      const user = await authenticateUser(token);
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
       }
@@ -2207,6 +2069,54 @@ const questionController = {
     }
   },
 };
+
+async function authenticateUser(token) {
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+  } catch (err) {
+    return null;
+  }
+
+  const user = await User.findOne({
+    where: {
+      itaccount: decoded.email,
+    },
+  });
+
+  return user;
+}
+
+async function createSorting({ sort, sort_order, mode }) {
+  let order = [];
+
+  if (sort && sort_order) {
+    const upperSortOrder = sort_order.toUpperCase();
+
+    const sortField = SORT_CONFIG.FIELDS[sort];
+    if (sortField) {
+      if (sortField === "SolvedCount") {
+        order.push([sequelize.literal("SolvedCount"), upperSortOrder]);
+      } else if (mode === "Tournament") {
+        order.push([
+          { model: Question, as: "Question" },
+          sortField,
+          upperSortOrder,
+        ]);
+      } else {
+        order.push([sortField, upperSortOrder]);
+      }
+    }
+  }
+
+  if (order.length > 0) {
+    return order;
+  }
+
+  return mode === "Tournament"
+    ? SORT_CONFIG.DEFAULT_ORDERS.TOURNAMENT
+    : SORT_CONFIG.DEFAULT_ORDERS.PRACTICE;
+}
 
 async function encryptData(text, secretKey) {
   const key = await getHashedKey(secretKey);
