@@ -86,10 +86,10 @@ const tournamentController = {
           .code(400);
       }
 
-      if (enrollEnd >= eventStart) {
+      if (enrollEnd >= eventEnd) {
         return h
           .response({
-            message: "Enrollment end date must be before event start date",
+            message: "Enrollment end date must be before event end date",
           })
           .code(400);
       }
@@ -217,8 +217,8 @@ const tournamentController = {
         return h.response({ message: "Enrollment start date must be before enrollment end date" }).code(400);
       }
   
-      if (enrollEndDateUTC7 >= eventStartDateUTC7) {
-        return h.response({ message: "Enrollment end date must be before event start date" }).code(400);
+      if (enrollEndDateUTC7 >= eventEndDateUTC7) {
+        return h.response({ message: "Enrollment end date must be before event end date" }).code(400);
       }
   
       if (eventStartDateUTC7 >= eventEndDateUTC7) {
