@@ -785,7 +785,7 @@ const questionController = {
                     include: [
                       [
                         sequelize.literal(`(
-                        SELECT COUNT(*)
+                        SELECT CAST(COUNT(*) AS INTEGER)
                         FROM public."TournamentSubmited" AS TS
                         JOIN public."QuestionTournaments" AS QT 
                         ON TS.question_tournament_id = QT.id
@@ -817,7 +817,7 @@ const questionController = {
                 categories_name: q.Category?.name,
                 difficultys_id: q.difficultys_id,
                 solved: TournamentSovledIds.includes(q.id),
-                submitCount: parseInt(q.SolvedCount || "0", 10),
+                submitCount: q.dataValues.SolvedCount || 0,
               };
             });
 
@@ -849,7 +849,7 @@ const questionController = {
           include: [
             [
               sequelize.literal(`(
-            SELECT COUNT(*) 
+            SELECT CAST(COUNT(*) AS INTEGER)
             FROM public."Submited" AS Submited 
             WHERE Submited.question_id = "Question".id
             )`),
@@ -881,7 +881,7 @@ const questionController = {
         difficultys_id: q.difficultys_id,
         author: q.createdBy,
         solved: solvedIds.includes(q.id),
-        submitCount: parseInt(q.SolvedCount || "0", 10),
+        submitCount: q.dataValues.SolvedCount || 0,
       }));
 
       totalPages = Math.ceil(question.count / limit);
@@ -1023,7 +1023,7 @@ const questionController = {
                       include: [
                         [
                           sequelize.literal(`(
-                        SELECT COUNT(*)
+                        SELECT CAST(COUNT(*) AS INTEGER)
                         FROM public."TournamentSubmited" AS TS
                         JOIN public."QuestionTournaments" AS QT
                         ON TS.question_tournament_id = QT.id
@@ -1095,7 +1095,7 @@ const questionController = {
                   include: [
                     [
                       sequelize.literal(`(
-                        SELECT COUNT(*)
+                        SELECT CAST(COUNT(*) AS INTEGER)
                         FROM public."TournamentSubmited" AS TS
                         JOIN public."QuestionTournaments" AS QT ON TS.question_tournament_id = QT.id
                         WHERE QT.questions_id = "Question".id
@@ -1126,7 +1126,7 @@ const questionController = {
                 author: q.createdBy,
                 mode: "Tournament",
                 is_selected: questionIds.includes(q.id),
-                submitCount: parseInt(q.SolvedCount || "0", 10),
+                submitCount: q.dataValues.SolvedCount || 0,
               };
             });
 
@@ -1161,7 +1161,7 @@ const questionController = {
           include: [
             [
               sequelize.literal(`(
-          SELECT COUNT(*) 
+          SELECT CAST(COUNT(*) AS INTEGER) 
           FROM public."Submited" AS Submited 
           WHERE Submited.question_id = "Question".id
           )`),
@@ -1169,7 +1169,7 @@ const questionController = {
             ],
             [
               sequelize.literal(`(
-          SELECT COUNT(*) 
+          SELECT CAST(COUNT(*) AS INTEGER)
           FROM public."TournamentSubmited" AS TS
           JOIN public."QuestionTournaments" AS QT ON TS.question_tournament_id = QT.id
           WHERE QT.questions_id = "Question".id
@@ -1178,7 +1178,7 @@ const questionController = {
             ],
             [
               sequelize.literal(`(
-                SELECT COUNT(*) 
+                SELECT CAST(COUNT(*) AS INTEGER)
                 FROM (
                   SELECT question_id as qid FROM public."Submited"
                   UNION ALL
@@ -1215,11 +1215,11 @@ const questionController = {
         let is_selected = false;
 
         if (q.Tournament) {
-          submitCount = parseInt(q.submitCountTournament || "0", 10);
+          submitCount = q.dataValues.submitCountTournament || 0;
           mode = "Tournament";
           is_selected = questionIds.includes(q.id);
         } else if (q.Practice) {
-          submitCount = parseInt(q.submitCount || "0", 10);
+          submitCount = q.dataValues.submitCount || 0;
           mode = "Practice";
         }
         return {
