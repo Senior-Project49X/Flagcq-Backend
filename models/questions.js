@@ -25,7 +25,7 @@ module.exports = (sequelize) => {
         allowNull: false,
       },
       Answer: {
-        type: DataTypes.STRING(80),
+        type: DataTypes.TEXT,
         allowNull: false,
       },
       point: {
