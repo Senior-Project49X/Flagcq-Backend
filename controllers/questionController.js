@@ -34,7 +34,7 @@ const {
 const SORT_CONFIG = {
   FIELDS: {
     QuestionName: "title",
-    Sovled: "SolvedCount",
+    Solved: "SolvedCount",
     Difficulty: "difficultys_id",
     Point: "point",
   },
@@ -2096,7 +2096,7 @@ async function createSorting({ sort, sort_order, mode }) {
     const sortField = SORT_CONFIG.FIELDS[sort];
     if (sortField) {
       if (sortField === "SolvedCount") {
-        order.push([sequelize.literal("SolvedCount"), upperSortOrder]);
+        order.push([sequelize.literal('"SolvedCount"'), upperSortOrder]);
       } else if (mode === "Tournament") {
         order.push([
           { model: Question, as: "Question" },
