@@ -238,9 +238,13 @@ const tournamentController = {
           })
           .code(400);
       }
-  
+
       if (enrollEndDateUTC7 >= eventEndDateUTC7) {
-        return h.response({ message: "Enrollment end date must be before event end date" }).code(400);
+        return h
+          .response({
+            message: "Enrollment end date must be before event end date",
+          })
+          .code(400);
       }
 
       if (eventStartDateUTC7 >= eventEndDateUTC7) {
@@ -617,8 +621,12 @@ const tournamentController = {
       if (user.role === "Admin") {
         return h
           .response({
-            eventEndDate: tournament.event_endDate,
+            event_startDate: tournament.event_startDate,
+            event_endDate: tournament.event_endDate,
+            enroll_endDate: tournament.enroll_endDate,
+            enroll_startDate: tournament.enroll_startDate,
             name: tournament.name,
+            mode: tournament.mode,
           })
           .code(200);
       }
