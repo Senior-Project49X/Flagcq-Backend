@@ -784,17 +784,18 @@ const questionController = {
                     exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
                     include: [
                       [
-                        sequelize.literal(`(
-                        SELECT CAST(COUNT(*) AS INTEGER)
-                        FROM public."TournamentSubmited" AS TS
-                        JOIN public."QuestionTournaments" AS QT 
-                        ON TS.question_tournament_id = QT.id
-                        WHERE QT.questions_id = "Question".id 
-                        AND QT.tournament_id = ?
-                      )`),
+                        sequelize.literal(
+                          `(
+                                SELECT CAST(COUNT(*) AS INTEGER)
+                                FROM public."TournamentSubmited" AS TS
+                                JOIN public."QuestionTournaments" AS QT
+                                ON TS.question_tournament_id = QT.id
+                                WHERE QT.questions_id = "Question"."id"
+                                AND QT.tournament_id = ${parsedTournamentId}
+                              )`
+                        ),
                         "SolvedCount",
                       ],
-                      { replacements: [parsedTournamentId] },
                     ],
                   },
                   include: [
@@ -1022,17 +1023,18 @@ const questionController = {
                       ],
                       include: [
                         [
-                          sequelize.literal(`(
-                        SELECT CAST(COUNT(*) AS INTEGER)
-                        FROM public."TournamentSubmited" AS TS
-                        JOIN public."QuestionTournaments" AS QT
-                        ON TS.question_tournament_id = QT.id
-                        WHERE QT.questions_id = "Question".id
-                        AND QT.tournament_id = ?
-                        )`),
+                          sequelize.literal(
+                            `(
+                              SELECT CAST(COUNT(*) AS INTEGER)
+                              FROM public."TournamentSubmited" AS TS
+                              JOIN public."QuestionTournaments" AS QT
+                              ON TS.question_tournament_id = QT.id
+                              WHERE QT.questions_id = "Question"."id"
+                              AND QT.tournament_id = ${parsedTournamentId}
+                            )`
+                          ),
                           "SolvedCount",
                         ],
-                        { replacements: [parsedTournamentId] },
                       ],
                     },
                     include: [
