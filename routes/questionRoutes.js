@@ -19,7 +19,7 @@ const questionRoute = [
   },
   {
     method: "GET",
-    path: "/api/question/{id}",
+    path: "/api/question",
     handler: questionController.getQuestionById,
   },
   {

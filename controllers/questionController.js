@@ -492,7 +492,9 @@ const questionController = {
 
   getQuestionById: async (request, h) => {
     try {
-      const questionId = parseInt(request.params.id, 10);
+      const { id, tournament_id } = request.query;
+      const questionId = parseInt(id, 10);
+
       if (isNaN(questionId) || questionId <= 0) {
         return h.response({ message: "Invalid question ID" }).code(400);
       }
@@ -506,6 +508,68 @@ const questionController = {
 
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
+      }
+
+      if (tournament_id) {
+        const parsedTournamentId = parseInt(tournament_id, 10);
+        if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
+          return h.response({ message: "Invalid tournament ID" }).code(400);
+        }
+
+        const tournament = await Tournaments.findOne({
+          where: { id: parsedTournamentId },
+        });
+
+        if (!tournament) {
+          return h.response({ message: "Tournament not found" }).code(404);
+        }
+
+        const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
+        if (currentTime > tournament.event_endDate) {
+          return h
+            .response({ message: "This tournament has already ended." })
+            .code(400);
+        }
+
+        if (currentTime < tournament.event_startDate) {
+          return h
+            .response({ message: "This tournament has not started yet." })
+            .code(400);
+        }
+
+        const existingTournament = await QuestionTournament.findOne({
+          where: {
+            questions_id: questionId,
+            tournament_id: parsedTournamentId,
+          },
+        });
+
+        if (!existingTournament) {
+          return h
+            .response({
+              message: "This question is not part of the selected tournament.",
+            })
+            .code(404);
+        }
+
+        if (user.role !== "Admin") {
+          const userTeam = await User_Team.findOne({
+            where: { users_id: user.user_id },
+            include: [
+              {
+                model: Team,
+                as: "team",
+                where: { tournament_id: parsedTournamentId },
+              },
+            ],
+          });
+
+          if (!userTeam) {
+            return h
+              .response({ message: "User is not part of this tournament." })
+              .code(404);
+          }
+        }
       }
 
       const question = await Question.findByPk(questionId, {
@@ -1834,6 +1898,23 @@ const questionController = {
       const tournamentId = parseInt(tournament_id, 10);
       if (isNaN(tournamentId) || tournamentId <= 0) {
         return h.response({ message: "Invalid tournament ID" }).code(400);
+      }
+
+      const tournament = await Tournaments.findByPk(tournamentId, {
+        transaction,
+      });
+
+      if (!tournament) {
+        return h.response({ message: "Tournament not found" }).code(404);
+      }
+
+      const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
+      if (currentTime > tournament.event_endDate) {
+        return h.response({ message: "Tournament has ended" }).code(400);
+      }
+
+      if (currentTime < tournament.event_startDate) {
+        return h.response({ message: "Tournament has not started" }).code(400);
       }
 
       const question = await QuestionTournament.findOne({
