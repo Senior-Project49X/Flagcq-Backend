@@ -531,7 +531,11 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
-      if (tournament_id) {
+      if (question.Tournament && user.role !== "Admin") {
+        if (!tournament_id) {
+          return h.response({ message: "Tournament ID is required" }).code(400);
+        }
+
         const parsedTournamentId = parseInt(tournament_id, 10);
         if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
           return h.response({ message: "Invalid tournament ID" }).code(400);
@@ -573,41 +577,21 @@ const questionController = {
             .code(404);
         }
 
-        if (user.role !== "Admin") {
-          const userTeam = await User_Team.findOne({
-            where: { users_id: user.user_id },
-            include: [
-              {
-                model: Team,
-                as: "team",
-                where: { tournament_id: parsedTournamentId },
-              },
-            ],
-          });
+        const userTeam = await User_Team.findOne({
+          where: { users_id: user.user_id },
+          include: [
+            {
+              model: Team,
+              as: "team",
+              where: { tournament_id: parsedTournamentId },
+            },
+          ],
+        });
 
-          if (!userTeam) {
-            return h
-              .response({ message: "User is not part of this tournament." })
-              .code(404);
-          }
-        }
-      }
-
-      if (user.role !== "Admin") {
-        if (!question.Practice && !question.Tournament) {
+        if (!userTeam) {
           return h
-            .response({ message: "This question is not available." })
+            .response({ message: "User is not part of this tournament." })
             .code(404);
-        } else if (question.Tournament) {
-          const validQuestion = await QuestionTournament.findOne({
-            where: { questions_id: questionId },
-          });
-
-          if (!validQuestion) {
-            return h
-              .response({ message: "This question is not available." })
-              .code(404);
-          }
         }
       }
 
@@ -664,28 +648,6 @@ const questionController = {
         };
 
         return h.response(data).code(200);
-      }
-
-      const existingTournament = await QuestionTournament.findOne({
-        where: { questions_id: question.id },
-      });
-
-      if (existingTournament) {
-        const validTime = await Tournaments.findOne({
-          where: { id: existingTournament.tournament_id },
-        });
-
-        const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
-
-        if (currentTime > validTime.event_endDate) {
-          return h.response({ message: "Tournament has ended" }).code(400);
-        }
-
-        if (currentTime < validTime.event_startDate) {
-          return h
-            .response({ message: "Tournament has not started" })
-            .code(400);
-        }
       }
 
       data = {
