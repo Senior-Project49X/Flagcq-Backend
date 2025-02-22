@@ -531,11 +531,7 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
-      if (question.Tournament && user.role !== "Admin") {
-        if (!tournament_id) {
-          return h.response({ message: "Tournament ID is required" }).code(400);
-        }
-
+      if (tournament_id) {
         const parsedTournamentId = parseInt(tournament_id, 10);
         if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
           return h.response({ message: "Invalid tournament ID" }).code(400);
@@ -577,21 +573,85 @@ const questionController = {
             .code(404);
         }
 
-        const userTeam = await User_Team.findOne({
-          where: { users_id: user.user_id },
-          include: [
-            {
-              model: Team,
-              as: "team",
-              where: { tournament_id: parsedTournamentId },
-            },
-          ],
+        if (user.role !== "Admin") {
+          const userTeam = await User_Team.findOne({
+            where: { users_id: user.user_id },
+            include: [
+              {
+                model: Team,
+                as: "team",
+                where: { tournament_id: parsedTournamentId },
+              },
+            ],
+          });
+
+          if (!userTeam) {
+            return h
+              .response({ message: "User is not part of this tournament." })
+              .code(404);
+          }
+        }
+
+        const HintData = await Hint.findAll({
+          where: { question_id: question.id },
+          attributes: ["id", "Description", "point"],
+          order: [["id", "ASC"]],
         });
 
-        if (!userTeam) {
+        let hintWithUsed = [];
+        let data = {};
+
+        if (HintData) {
+          hintWithUsed = await Promise.all(
+            HintData.map(async (hint) => {
+              const hintUsed = await HintUsed.findOne({
+                where: { hint_id: hint.id, user_id: user.user_id },
+              });
+
+              return {
+                id: hint.id,
+                point: hint.point,
+                used: !!hintUsed,
+              };
+            })
+          );
+        }
+
+        const isSolved = await Submited.findOne({
+          where: { users_id: user.user_id, question_id: question.id },
+        });
+
+        data = {
+          id: question.id,
+          title: question.title,
+          description: question.Description,
+          point: question.point,
+          categories_name: question.Category?.name,
+          difficultys_id: question.difficultys_id,
+          file_path: question.file_path,
+          author: question.createdBy,
+          solved: !!isSolved,
+          hints: hintWithUsed,
+        };
+
+        return h.response(data).code(200);
+      }
+
+      if (user.role !== "Admin") {
+        if (!question.Practice && !question.Tournament) {
           return h
-            .response({ message: "User is not part of this tournament." })
+            .response({ message: "This question is not available." })
             .code(404);
+        } else if (question.Tournament) {
+          const validQuestion = await QuestionTournament.findOne({
+            where: { questions_id: questionId },
+          });
+
+          if (!validQuestion) {
+            return h
+              .response({ message: "This question is not available." })
+              .code(404);
+          }
         }
       }
 
