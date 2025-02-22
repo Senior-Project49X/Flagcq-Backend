@@ -37,7 +37,7 @@ const SORT_CONFIG = {
     Solved: "SolvedCount",
     Difficulty: "difficultys_id",
     Point: "point",
-    Category: "categories_id",
+    Category: "name",
   },
   DEFAULT_ORDERS: {
     TOURNAMENT: [
@@ -2181,6 +2181,21 @@ async function createSorting({ sort, sort_order, mode }) {
     if (sortField) {
       if (sortField === "SolvedCount") {
         order.push([sequelize.literal('"SolvedCount"'), upperSortOrder]);
+      } else if (sortField === "name") {
+        if (mode === "Tournament") {
+          order.push([
+            { model: Question, as: "Question" },
+            { model: Category, as: "Category" },
+            sortField,
+            upperSortOrder,
+          ]);
+        } else {
+          order.push([
+            { model: Category, as: "Category" },
+            sortField,
+            upperSortOrder,
+          ]);
+        }
       } else if (mode === "Tournament") {
         order.push([
           { model: Question, as: "Question" },
