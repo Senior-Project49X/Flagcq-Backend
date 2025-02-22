@@ -37,6 +37,7 @@ const SORT_CONFIG = {
     Solved: "SolvedCount",
     Difficulty: "difficultys_id",
     Point: "point",
+    Category: "categories_id",
   },
   DEFAULT_ORDERS: {
     TOURNAMENT: [
