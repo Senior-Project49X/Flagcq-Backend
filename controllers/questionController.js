@@ -506,7 +506,6 @@ const questionController = {
       }
 
       const user = await authenticateUser(token);
-
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
       }
@@ -531,6 +530,7 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
+      // Tournament validation block
       if (tournament_id) {
         const parsedTournamentId = parseInt(tournament_id, 10);
         if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
@@ -591,53 +591,7 @@ const questionController = {
               .code(404);
           }
         }
-
-        const HintData = await Hint.findAll({
-          where: { question_id: question.id },
-          attributes: ["id", "Description", "point"],
-          order: [["id", "ASC"]],
-        });
-
-        let hintWithUsed = [];
-        let data = {};
-
-        if (HintData) {
-          hintWithUsed = await Promise.all(
-            HintData.map(async (hint) => {
-              const hintUsed = await HintUsed.findOne({
-                where: { hint_id: hint.id, user_id: user.user_id },
-              });
-
-              return {
-                id: hint.id,
-                point: hint.point,
-                used: !!hintUsed,
-              };
-            })
-          );
-        }
-
-        const isSolved = await Submited.findOne({
-          where: { users_id: user.user_id, question_id: question.id },
-        });
-
-        data = {
-          id: question.id,
-          title: question.title,
-          description: question.Description,
-          point: question.point,
-          categories_name: question.Category?.name,
-          difficultys_id: question.difficultys_id,
-          file_path: question.file_path,
-          author: question.createdBy,
-          solved: !!isSolved,
-          hints: hintWithUsed,
-        };
-
-        return h.response(data).code(200);
-      }
-
-      if (user.role !== "Admin") {
+      } else if (user.role !== "Admin") {
         if (!question.Practice && !question.Tournament) {
           return h
             .response({ message: "This question is not available." })
@@ -661,56 +615,24 @@ const questionController = {
         order: [["id", "ASC"]],
       });
 
-      let hintWithUsed = [];
-      let data = {};
-
-      if (HintData) {
-        hintWithUsed = await Promise.all(
-          HintData.map(async (hint) => {
-            const hintUsed = await HintUsed.findOne({
-              where: { hint_id: hint.id, user_id: user.user_id },
-            });
-
-            return {
-              id: hint.id,
-              point: hint.point,
-              used: !!hintUsed,
-            };
-          })
-        );
-      }
-
       const isSolved = await Submited.findOne({
         where: { users_id: user.user_id, question_id: question.id },
       });
 
-      if (user.role === "Admin") {
-        const secretKey = process.env.ANSWER_SECRET_KEY;
+      const hintWithUsed =
+        user.role === "Admin"
+          ? HintData
+          : await Promise.all(
+              HintData.map(async (hint) => ({
+                id: hint.id,
+                point: hint.point,
+                used: !!(await HintUsed.findOne({
+                  where: { hint_id: hint.id, user_id: user.user_id },
+                })),
+              }))
+            );
 
-        const decryptedAnswer = await decryptData(question.Answer, secretKey);
-        data = {
-          id: question.id,
-          title: question.title,
-          description: question.Description,
-          point: question.point,
-          categories_id: question.Category?.id,
-          categories_name: question.Category?.name,
-          difficultys_id: question.difficultys_id,
-          file_path: question.file_path,
-          answer: decryptedAnswer,
-          author: question.createdBy,
-          hints: HintData,
-          mode: (() => {
-            if (question.Practice) return "Practice";
-            if (question.Tournament) return "Tournament";
-            return "Unpublished";
-          })(),
-        };
-
-        return h.response(data).code(200);
-      }
-
-      data = {
+      const baseData = {
         id: question.id,
         title: question.title,
         description: question.Description,
@@ -719,11 +641,31 @@ const questionController = {
         difficultys_id: question.difficultys_id,
         file_path: question.file_path,
         author: question.createdBy,
-        solved: !!isSolved,
-        hints: hintWithUsed,
       };
 
-      return h.response(data).code(200);
+      const responseData =
+        user.role === "Admin"
+          ? {
+              ...baseData,
+              categories_id: question.Category?.id,
+              answer: await decryptData(
+                question.Answer,
+                process.env.ANSWER_SECRET_KEY
+              ),
+              hints: HintData,
+              mode: (() => {
+                if (question.Practice) return "Practice";
+                if (question.Tournament) return "Tournament";
+                return "Unpublished";
+              })(),
+            }
+          : {
+              ...baseData,
+              solved: !!isSolved,
+              hints: hintWithUsed,
+            };
+
+      return h.response(responseData).code(200);
     } catch (error) {
       return h.response({ message: error.message }).code(500);
     }
@@ -2212,46 +2154,50 @@ async function authenticateUser(token) {
 }
 
 async function createSorting({ sort, sort_order, mode }) {
-  let order = [];
-
   if (sort && sort_order) {
     const upperSortOrder = sort_order.toUpperCase();
-
     const sortField = SORT_CONFIG.FIELDS[sort];
     if (sortField) {
-      if (sortField === "SolvedCount") {
-        order.push([sequelize.literal('"SolvedCount"'), upperSortOrder]);
-      } else if (sortField === "name") {
-        if (mode === "Tournament") {
-          order.push([
-            { model: Question, as: "Question" },
-            { model: Category, as: "Category" },
-            sortField,
-            upperSortOrder,
-          ]);
-        } else {
-          order.push([
-            { model: Category, as: "Category" },
-            sortField,
-            upperSortOrder,
-          ]);
-        }
-      } else if (mode === "Tournament") {
-        order.push([
-          { model: Question, as: "Question" },
-          sortField,
-          upperSortOrder,
-        ]);
-      } else {
-        order.push([sortField, upperSortOrder]);
-      }
+      return buildOrder(sortField, upperSortOrder, mode);
     }
   }
+  return getDefaultOrder(mode);
+}
 
-  if (order.length > 0) {
-    return order;
+function buildOrder(sortField, upperSortOrder, mode) {
+  let order = [];
+  if (sortField === "SolvedCount") {
+    order.push([sequelize.literal('"SolvedCount"'), upperSortOrder]);
+  } else if (sortField === "name") {
+    order.push(buildCategoryOrder(sortField, upperSortOrder, mode));
+  } else {
+    order.push(buildFieldOrder(sortField, upperSortOrder, mode));
   }
+  return order;
+}
 
+function buildCategoryOrder(sortField, upperSortOrder, mode) {
+  if (mode === "Tournament") {
+    return [
+      { model: Question, as: "Question" },
+      { model: Category, as: "Category" },
+      sortField,
+      upperSortOrder,
+    ];
+  } else {
+    return [{ model: Category, as: "Category" }, sortField, upperSortOrder];
+  }
+}
+
+function buildFieldOrder(sortField, upperSortOrder, mode) {
+  if (mode === "Tournament") {
+    return [{ model: Question, as: "Question" }, sortField, upperSortOrder];
+  } else {
+    return [sortField, upperSortOrder];
+  }
+}
+
+function getDefaultOrder(mode) {
   return mode === "Tournament"
     ? SORT_CONFIG.DEFAULT_ORDERS.TOURNAMENT
     : SORT_CONFIG.DEFAULT_ORDERS.PRACTICE;
