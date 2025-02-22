@@ -38,7 +38,7 @@ module.exports = (sequelize) => {
         allowNull: false,
       },
       role: {
-        type: DataTypes.ENUM("User", "Admin", "TA"),
+        type: DataTypes.ENUM("User", "Admin"),
         allowNull: false,
       },
     },
@@ -61,7 +61,6 @@ module.exports = (sequelize) => {
       otherKey: "team_id",
       as: "teams", // Alias for teams the user belongs to
     });
-    
   };
 
   return User;
