@@ -691,7 +691,7 @@ const tournamentController = {
           teamRank: userTeamRank ? userTeamRank.rank : null,
           teamScore: userTeamRank ? userTeamRank.total_points : null,
           individualScore: individualScore || 0,
-          eventEndDate: tournament.event_endDate,
+          event_endDate: tournament.event_endDate,
         })
         .code(200);
     } catch (error) {
