@@ -511,6 +511,26 @@ const questionController = {
         return h.response({ message: "User not found" }).code(404);
       }
 
+      const question = await Question.findByPk(questionId, {
+        attributes: {
+          exclude:
+            user.role === "Admin"
+              ? ["createdAt", "updatedAt"]
+              : ["Answer", "createdAt", "updatedAt", "Practice", "Tournament"],
+        },
+        include: [
+          {
+            model: Category,
+            as: "Category",
+            attributes: ["name", "id"],
+          },
+        ],
+      });
+
+      if (!question) {
+        return h.response({ message: "Question not found" }).code(404);
+      }
+
       if (tournament_id) {
         const parsedTournamentId = parseInt(tournament_id, 10);
         if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
@@ -573,24 +593,22 @@ const questionController = {
         }
       }
 
-      const question = await Question.findByPk(questionId, {
-        attributes: {
-          exclude:
-            user.role === "Admin"
-              ? ["createdAt", "updatedAt"]
-              : ["Answer", "createdAt", "updatedAt", "Practice", "Tournament"],
-        },
-        include: [
-          {
-            model: Category,
-            as: "Category",
-            attributes: ["name", "id"],
-          },
-        ],
-      });
+      if (user.role !== "Admin") {
+        if (!question.Practice && !question.Tournament) {
+          return h
+            .response({ message: "This question is not available." })
+            .code(404);
+        } else if (question.Tournament) {
+          const validQuestion = await QuestionTournament.findOne({
+            where: { questions_id: questionId },
+          });
 
-      if (!question) {
-        return h.response({ message: "Question not found" }).code(404);
+          if (!validQuestion) {
+            return h
+              .response({ message: "This question is not available." })
+              .code(404);
+          }
+        }
       }
 
       const HintData = await Hint.findAll({
