@@ -4,7 +4,8 @@
   "description": "first project",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start" : " npx sequelize-cli db:migrate && node index.js"
   },
   "author": "",
   "license": "ISC",
