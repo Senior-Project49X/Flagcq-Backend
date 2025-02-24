@@ -484,22 +484,48 @@ const tournamentController = {
         return h.response({ message: "Invalid page parameter" }).code(400);
       }
 
-      const limit = 4; // Number of tournaments per page
+      const limit = 4;
       const offset = (parsedPage - 1) * limit;
 
-      // Find tournaments joined by the user
-      const { count, rows: tournaments } = await Tournament.findAndCountAll({
+      // First, get all tournament IDs that the user has joined
+      const joinedTournamentIds = await Tournament.findAll({
+        attributes: ["id"],
         include: {
           model: Team,
+          attributes: [],
           include: {
             model: Users_Team,
             where: { users_id: userId },
-            attributes: ["team_id"],
+            attributes: [],
             as: "usersTeams",
-            required: true, // Ensure only joined teams are considered
+            required: true,
           },
-          required: true, // Ensure only tournaments with joined teams are considered
+          required: true,
         },
+        raw: true,
+      });
+
+      const tournamentIds = joinedTournamentIds.map((t) => t.id);
+
+      // Then, get the paginated tournaments with all teams included
+      const { count, rows: tournaments } = await Tournament.findAndCountAll({
+        where: {
+          id: {
+            [Op.in]: tournamentIds,
+          },
+        },
+        include: [
+          {
+            model: Team,
+            include: {
+              model: Users_Team,
+              where: { users_id: userId },
+              attributes: ["team_id"],
+              as: "usersTeams",
+              required: false,
+            },
+          },
+        ],
         limit,
         offset,
         order: [["createdAt", "DESC"]],
@@ -508,9 +534,8 @@ const tournamentController = {
 
       // Construct the response
       const tournamentDetails = tournaments.map((tournament) => {
-        // Find the user's team for this tournament
         const userTeam = tournament.Teams.find(
-          (team) => team.usersTeams.length > 0
+          (team) => team.usersTeams && team.usersTeams.length > 0
         );
 
         return {
@@ -521,14 +546,14 @@ const tournamentController = {
           enroll_endDate: tournament.enroll_endDate,
           event_startDate: tournament.event_startDate,
           event_endDate: tournament.event_endDate,
-          mode: tournament.mode, // Add mode to the response
-          teamLimit: tournament.teamLimit, // Add teamLimit to the response
-          playerLimit: tournament.playerLimit, // Add playerLimit to the response
+          mode: tournament.mode,
+          teamLimit: tournament.teamLimit,
+          playerLimit: tournament.playerLimit,
           createdAt: tournament.createdAt,
           updatedAt: tournament.updatedAt,
           hasJoined: !!userTeam,
           teamId: userTeam ? userTeam.id : null,
-          teamCount: tournament.Teams ? tournament.Teams.length : 0,
+          teamCount: tournament.Teams ? tournament.Teams.length : 0, // Now this will include all teams
         };
       });
 
@@ -894,28 +919,34 @@ const tournamentController = {
 
       // Use `user.id` for fetching details
       const users_id = user.user_id;
-  
+
       if (!tournament_id) {
         return h.response({ message: "Tournament ID is required." }).code(400);
       }
-  
+
       // First find the user's team
       const userTeam = await Users_Team.findOne({
         where: { users_id },
-        include: [{
-          model: Team,
-          where: { tournament_id },
-          as: "team",
-          required: true,
-        }],
+        include: [
+          {
+            model: Team,
+            where: { tournament_id },
+            as: "team",
+            required: true,
+          },
+        ],
       });
-  
+
       if (!userTeam) {
-        return h.response({ message: "User is not part of any team in this tournament." }).code(404);
+        return h
+          .response({
+            message: "User is not part of any team in this tournament.",
+          })
+          .code(404);
       }
-  
+
       const team_id = userTeam.team_id;
-  
+
       // Fetch the leaderboard to determine rank
       const leaderboard = await TeamScores.findAll({
         where: { tournament_id },
@@ -924,21 +955,24 @@ const tournamentController = {
           ["total_points", "DESC"],
           ["updatedAt", "ASC"],
         ],
-        include: [{
-          model: Team,
-          attributes: ["id", "name"],
-          required: true,
-        }],
+        include: [
+          {
+            model: Team,
+            attributes: ["id", "name"],
+            required: true,
+          },
+        ],
       });
-  
+
       // Find user's team rank
-      const rank = leaderboard.findIndex(entry => entry.team_id === team_id) + 1;
-  
+      const rank =
+        leaderboard.findIndex((entry) => entry.team_id === team_id) + 1;
+
       // Fetch specific team with scores and members
       const team = await Team.findOne({
-        where: { 
+        where: {
           id: team_id,
-          tournament_id 
+          tournament_id,
         },
         attributes: ["id", "name"],
         include: [
@@ -951,26 +985,30 @@ const tournamentController = {
           {
             model: Users_Team,
             as: "usersTeams",
-            include: [{
-              model: User,
-              as: "user",
-              attributes: ["user_id", "first_name", "last_name"],
-              include: [{
-                model: TournamentPoints,
-                as: "tournamentPoints",
-                where: { tournament_id },
-                attributes: ["points"],
-                required: false,
-              }],
-            }],
+            include: [
+              {
+                model: User,
+                as: "user",
+                attributes: ["user_id", "first_name", "last_name"],
+                include: [
+                  {
+                    model: TournamentPoints,
+                    as: "tournamentPoints",
+                    where: { tournament_id },
+                    attributes: ["points"],
+                    required: false,
+                  },
+                ],
+              },
+            ],
           },
         ],
       });
-  
+
       if (!team) {
         return h.response({ message: "Team not found." }).code(404);
       }
-  
+
       // Structure the response
       const totalPoints = team.TeamScores[0]?.total_points || 0;
       const members = team.usersTeams.map((member, index) => ({
@@ -980,7 +1018,7 @@ const tournamentController = {
         lastName: member.user.last_name,
         individualScore: member.user.tournamentPoints[0]?.points || 0,
       }));
-  
+
       const response = {
         teamID: team.id,
         teamName: team.name,
@@ -988,14 +1026,16 @@ const tournamentController = {
         rank,
         members,
       };
-  
+
       return h.response(response).code(200);
     } catch (error) {
       console.error("Error retrieving team information:", error.message);
-      return h.response({
-        message: "Failed to retrieve team information.",
-        error: error.message,
-      }).code(500);
+      return h
+        .response({
+          message: "Failed to retrieve team information.",
+          error: error.message,
+        })
+        .code(500);
     }
   },
 
