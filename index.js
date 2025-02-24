@@ -17,7 +17,7 @@ const init = async () => {
     host: "localhost",
     routes: {
       cors: {
-        origin: ["http://localhost:3000"],
+        origin: ["http://localhost:3000" , "http://localhost:5173"],
         headers: [
           "Accept",
           "Authorization",
