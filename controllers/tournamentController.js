@@ -743,6 +743,32 @@ const tournamentController = {
         return h.response({ message: "Tournament ID is required." }).code(400);
       }
 
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h
+          .response({ message: "Unauthorized: No token provided." })
+          .code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      // Retrieve user
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [
+            { student_id: decoded.student_id },
+            { itaccount: decoded.email },
+          ],
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+
       // Fetch the leaderboard to determine ranks
       const leaderboard = await TeamScores.findAll({
         where: { tournament_id }, // Filter by tournament_id
@@ -834,6 +860,142 @@ const tournamentController = {
           error: error.message,
         })
         .code(500);
+    }
+  },
+
+  getMyTeamInfoInTournament: async (req, h) => {
+    try {
+      const { tournament_id } = req.params;
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h
+          .response({ message: "Unauthorized: No token provided." })
+          .code(401);
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      if (!decoded) {
+        return h.response({ message: "Invalid token" }).code(401);
+      }
+
+      // Retrieve user
+      const user = await User.findOne({
+        where: {
+          [Op.or]: [
+            { student_id: decoded.student_id },
+            { itaccount: decoded.email },
+          ],
+        },
+      });
+
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+
+      // Use `user.id` for fetching details
+      const users_id = user.user_id;
+  
+      if (!tournament_id) {
+        return h.response({ message: "Tournament ID is required." }).code(400);
+      }
+  
+      // First find the user's team
+      const userTeam = await Users_Team.findOne({
+        where: { users_id },
+        include: [{
+          model: Team,
+          where: { tournament_id },
+          as: "team",
+          required: true,
+        }],
+      });
+  
+      if (!userTeam) {
+        return h.response({ message: "User is not part of any team in this tournament." }).code(404);
+      }
+  
+      const team_id = userTeam.team_id;
+  
+      // Fetch the leaderboard to determine rank
+      const leaderboard = await TeamScores.findAll({
+        where: { tournament_id },
+        attributes: ["team_id", "total_points"],
+        order: [
+          ["total_points", "DESC"],
+          ["updatedAt", "ASC"],
+        ],
+        include: [{
+          model: Team,
+          attributes: ["id", "name"],
+          required: true,
+        }],
+      });
+  
+      // Find user's team rank
+      const rank = leaderboard.findIndex(entry => entry.team_id === team_id) + 1;
+  
+      // Fetch specific team with scores and members
+      const team = await Team.findOne({
+        where: { 
+          id: team_id,
+          tournament_id 
+        },
+        attributes: ["id", "name"],
+        include: [
+          {
+            model: TeamScores,
+            attributes: ["team_id", "total_points"],
+            where: { tournament_id },
+            required: true,
+          },
+          {
+            model: Users_Team,
+            as: "usersTeams",
+            include: [{
+              model: User,
+              as: "user",
+              attributes: ["user_id", "first_name", "last_name"],
+              include: [{
+                model: TournamentPoints,
+                as: "tournamentPoints",
+                where: { tournament_id },
+                attributes: ["points"],
+                required: false,
+              }],
+            }],
+          },
+        ],
+      });
+  
+      if (!team) {
+        return h.response({ message: "Team not found." }).code(404);
+      }
+  
+      // Structure the response
+      const totalPoints = team.TeamScores[0]?.total_points || 0;
+      const members = team.usersTeams.map((member, index) => ({
+        userId: member.user.user_id,
+        isLeader: index === 0,
+        firstName: member.user.first_name,
+        lastName: member.user.last_name,
+        individualScore: member.user.tournamentPoints[0]?.points || 0,
+      }));
+  
+      const response = {
+        teamID: team.id,
+        teamName: team.name,
+        totalPoints,
+        rank,
+        members,
+      };
+  
+      return h.response(response).code(200);
+    } catch (error) {
+      console.error("Error retrieving team information:", error.message);
+      return h.response({
+        message: "Failed to retrieve team information.",
+        error: error.message,
+      }).code(500);
     }
   },
 
