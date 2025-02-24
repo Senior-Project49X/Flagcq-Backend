@@ -380,9 +380,13 @@ const tournamentController = {
           const hasUserJoinedOrAdmin =
             tournament.hasJoined || user.role === "Admin";
           const isEnrollmentOpen = new Date(tournament.enroll_endDate) > now;
-          const isEventOngoing =
-            // new Date(tournament.event_startDate) <= now &&
-            new Date(tournament.event_endDate) > now;
+          const isEventOngoing = new Date(tournament.event_endDate) > now;
+          const isPrivate = tournament.mode.toLowerCase() === "private";
+
+          // For private tournaments, only show if user has joined or is admin
+          if (isPrivate && !hasUserJoinedOrAdmin) {
+            return false;
+          }
 
           // Show if user has joined, is admin, enrollment is open, or event is ongoing
           return hasUserJoinedOrAdmin || isEnrollmentOpen || isEventOngoing;

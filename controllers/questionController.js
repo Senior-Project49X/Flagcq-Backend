@@ -515,7 +515,7 @@ const questionController = {
           exclude:
             user.role === "Admin"
               ? ["createdAt", "updatedAt"]
-              : ["Answer", "createdAt", "updatedAt", "Practice", "Tournament"],
+              : ["Answer", "createdAt", "updatedAt"],
         },
         include: [
           {
@@ -530,7 +530,6 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
-      // Tournament validation block
       if (tournament_id) {
         const parsedTournamentId = parseInt(tournament_id, 10);
         if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
@@ -543,19 +542,6 @@ const questionController = {
 
         if (!tournament) {
           return h.response({ message: "Tournament not found" }).code(404);
-        }
-
-        const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
-        if (currentTime > tournament.event_endDate) {
-          return h
-            .response({ message: "This tournament has already ended." })
-            .code(400);
-        }
-
-        if (currentTime < tournament.event_startDate) {
-          return h
-            .response({ message: "This tournament has not started yet." })
-            .code(400);
         }
 
         const existingTournament = await QuestionTournament.findOne({
@@ -574,6 +560,19 @@ const questionController = {
         }
 
         if (user.role !== "Admin") {
+          const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
+          if (currentTime > tournament.event_endDate) {
+            return h
+              .response({ message: "This tournament has already ended." })
+              .code(400);
+          }
+
+          if (currentTime < tournament.event_startDate) {
+            return h
+              .response({ message: "This tournament has not started yet." })
+              .code(400);
+          }
+
           const userTeam = await User_Team.findOne({
             where: { users_id: user.user_id },
             include: [
@@ -596,7 +595,7 @@ const questionController = {
           return h
             .response({ message: "This question is not available." })
             .code(404);
-        } else if (question.Tournament) {
+        } else if (!question.Practice && question.Tournament) {
           const validQuestion = await QuestionTournament.findOne({
             where: { questions_id: questionId },
           });
@@ -643,6 +642,15 @@ const questionController = {
         author: question.createdBy,
       };
 
+      let mode;
+      if (question.Practice) {
+        mode = "Practice";
+      } else if (question.Tournament) {
+        mode = "Tournament";
+      } else {
+        mode = "Unpublished";
+      }
+
       const responseData =
         user.role === "Admin"
           ? {
@@ -653,11 +661,7 @@ const questionController = {
                 process.env.ANSWER_SECRET_KEY
               ),
               hints: HintData,
-              mode: (() => {
-                if (question.Practice) return "Practice";
-                if (question.Tournament) return "Tournament";
-                return "Unpublished";
-              })(),
+              mode,
             }
           : {
               ...baseData,

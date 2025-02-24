@@ -21,7 +21,7 @@ module.exports = (sequelize) => {
         unique: true,
       },
       Description: {
-        type: DataTypes.STRING(500),
+        type: DataTypes.TEXT,
         allowNull: false,
       },
       Answer: {
