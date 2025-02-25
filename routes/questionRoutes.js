@@ -39,7 +39,7 @@ const questionRoute = [
   },
   {
     method: "GET",
-    path: "/api/question/download/{id}",
+    path: "/api/question/download",
     handler: questionController.downloadFile,
   },
   {
@@ -70,7 +70,7 @@ const questionRoute = [
   },
   {
     method: "GET",
-    path: "/api/question/usehint/{id}",
+    path: "/api/question/usehint",
     handler: questionController.UseHint,
   },
   {

@@ -5,7 +5,7 @@ const crypto = require("crypto");
 
 // Third-party packages
 const jwt = require("jsonwebtoken");
-const { Op } = require("sequelize");
+const { Op, where } = require("sequelize");
 const moment = require("moment-timezone");
 const xss = require("xss");
 
@@ -1339,16 +1339,16 @@ const questionController = {
         isFileEdited,
       } = request.payload;
 
+      const question = await Question.findByPk(questionId);
+      if (!question) {
+        return h.response({ message: "Question not found" }).code(404);
+      }
+
       let ArrayHint;
       try {
         ArrayHint = JSON.parse(Hints);
       } catch (error) {
         return h.response({ message: "Invalid Hints format" }).code(400);
-      }
-
-      const question = await Question.findByPk(questionId);
-      if (!question) {
-        return h.response({ message: "Question not found" }).code(404);
       }
 
       if (isFileEdited !== "true" && isFileEdited !== "false") {
@@ -1357,26 +1357,20 @@ const questionController = {
           .code(400);
       }
 
-      const existingSubmission = await Submited.findOne({
-        where: { question_id: questionId },
-      });
-      if (existingSubmission) {
+      if (await Submited.findOne({ where: { question_id: questionId } })) {
         return h
           .response({ message: "Question has been submitted, cannot update" })
           .code(400);
       }
 
-      const existingTournamentSubmited = await TournamentSubmited.findOne({
-        attributes: ["id"],
-        include: [
-          {
-            model: QuestionTournament,
-            where: { questions_id: questionId },
-          },
-        ],
-      });
-
-      if (existingTournamentSubmited) {
+      if (
+        await TournamentSubmited.findOne({
+          attributes: ["id"],
+          include: [
+            { model: QuestionTournament, where: { questions_id: questionId } },
+          ],
+        })
+      ) {
         return h
           .response({
             message: "Question has been submitted in tournament, cannot update",
@@ -1398,10 +1392,11 @@ const questionController = {
         }
       }
 
-      const existingTournament = await QuestionTournament.findOne({
-        where: { questions_id: questionId },
-      });
-      if (existingTournament) {
+      if (
+        await QuestionTournament.findOne({
+          where: { questions_id: questionId },
+        })
+      ) {
         return h
           .response({ message: "Question in tournament cannot be updated" })
           .code(400);
@@ -1409,40 +1404,26 @@ const questionController = {
 
       if (title) {
         const trimmedTitle = title.trim();
-        const existingTitle = await Question.findOne({
-          where: { title: trimmedTitle, id: { [Op.ne]: questionId } },
-        });
-        if (existingTitle) {
+        if (
+          await Question.findOne({
+            where: { title: trimmedTitle, id: { [Op.ne]: questionId } },
+          })
+        ) {
           return h.response({ message: "Title already exists" }).code(409);
         }
-
-        const sanitizedTitle = xss(trimmedTitle);
-        question.title = sanitizedTitle;
+        question.title = xss(trimmedTitle);
       }
 
       let file_path = question.file_path;
-
       if (file?.filename) {
-        const existingFile = await Question.findOne({
-          where: { file_path: file.filename, id: { [Op.ne]: questionId } },
-        });
-        if (existingFile) {
+        if (
+          await Question.findOne({
+            where: { file_path: file.filename, id: { [Op.ne]: questionId } },
+          })
+        ) {
           return h.response({ message: "File already exists" }).code(409);
         }
-      } else if (isFileEdited === "true") {
-        if (question.file_path) {
-          try {
-            fs.unlinkSync(
-              path.join(__dirname, "..", "uploads", question.file_path)
-            );
-          } catch (err) {
-            console.warn("Failed to delete old file:", err);
-          }
-        }
-        file_path = null;
-      }
 
-      if (file?.filename && file?.path) {
         const allowedFileTypes = [
           "application/x-compressed",
           "application/x-zip-compressed",
@@ -1461,7 +1442,7 @@ const questionController = {
           }
         }
 
-        const fileName = `${file.filename}`;
+        const fileName = file.filename;
         const uploadDirectory = path.join(__dirname, "..", "uploads");
         const filePath = path.join(uploadDirectory, fileName);
 
@@ -1475,6 +1456,15 @@ const questionController = {
         } catch (err) {
           return h.response({ message: "Failed to upload file" }).code(500);
         }
+      } else if (isFileEdited === "true" && question.file_path) {
+        try {
+          fs.unlinkSync(
+            path.join(__dirname, "..", "uploads", question.file_path)
+          );
+        } catch (err) {
+          console.warn("Failed to delete old file:", err);
+        }
+        file_path = null;
       }
 
       if (categories_id) {
@@ -1500,14 +1490,13 @@ const questionController = {
       }
 
       if (Description) {
-        const sanitizedDescription = xss(Description);
-        question.Description = sanitizedDescription;
+        question.Description = xss(Description);
       }
+
       if (Answer) {
         const trimmedAnswer = Answer.trim();
         const secretKey = process.env.ANSWER_SECRET_KEY;
-        const encryptedAnswer = await encryptData(trimmedAnswer, secretKey);
-        question.Answer = encryptedAnswer;
+        question.Answer = await encryptData(trimmedAnswer, secretKey);
       }
 
       if (point) {
@@ -1569,30 +1558,20 @@ const questionController = {
       question.Practice = false;
       question.Tournament = false;
 
-      if (Practice) {
-        if (Practice !== "true" && Practice !== "false") {
-          return h
-            .response({ message: "Invalid value for Practice" })
-            .code(400);
-        } else if (Practice === "true") {
-          question.Practice = true;
-        }
+      const isPractice = Practice === "true";
+      const isTournament = Tournament === "true";
+
+      if (isPractice && isTournament) {
+        return h
+          .response({ message: "Practice and Tournament cannot both be true" })
+          .code(400);
       }
 
-      if (Tournament) {
-        if (Tournament !== "true" && Tournament !== "false") {
-          return h
-            .response({ message: "Invalid value for Tournament" })
-            .code(400);
-        } else if (Tournament === "true") {
-          question.Tournament = true;
-        }
-      }
-
+      question.Practice = isPractice;
+      question.Tournament = isTournament;
       question.file_path = file_path;
 
       await question.save({ transaction });
-
       await transaction.commit();
 
       return h.response(question).code(200);
@@ -2026,31 +2005,114 @@ const questionController = {
     }
   },
   downloadFile: async (request, h) => {
+    const transaction = await sequelize.transaction();
     try {
-      const questionId = parseInt(request.params.id, 10);
+      const { id, tournament_id } = request.query;
+      const questionId = parseInt(id, 10);
+
       if (isNaN(questionId) || questionId <= 0) {
+        await transaction.rollback();
         return h.response({ message: "Invalid question ID" }).code(400);
       }
 
       const token = request.state["cmu-oauth-token"];
       if (!token) {
+        await transaction.rollback();
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
       const user = await authenticateUser(token);
       if (!user) {
+        await transaction.rollback();
         return h.response({ message: "User not found" }).code(404);
       }
 
-      const question = await Question.findByPk(questionId);
+      const question = await Question.findByPk(questionId, { transaction });
       if (!question) {
+        await transaction.rollback();
         return h.response({ message: "Question not found" }).code(404);
       }
 
       if (!question.file_path) {
+        await transaction.rollback();
         return h
           .response({ message: "No file available for this question" })
           .code(400);
+      }
+
+      const questionTournament = await QuestionTournament.findOne({
+        where: { questions_id: questionId },
+        transaction,
+      });
+
+      if (questionTournament && user.role !== "Admin" && !tournament_id) {
+        await transaction.rollback();
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      if (tournament_id) {
+        const tournamentId = parseInt(tournament_id, 10);
+
+        if (isNaN(tournamentId) || tournamentId <= 0) {
+          await transaction.rollback();
+          return h.response({ message: "Invalid tournament ID" }).code(400);
+        }
+
+        const tournament = await Tournaments.findByPk(tournamentId, {
+          transaction,
+        });
+        if (!tournament) {
+          await transaction.rollback();
+          return h.response({ message: "Tournament not found" }).code(404);
+        }
+
+        const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
+
+        if (currentTime > tournament.event_endDate) {
+          await transaction.rollback();
+          return h.response({ message: "Tournament has ended" }).code(400);
+        }
+
+        if (currentTime < tournament.event_startDate) {
+          await transaction.rollback();
+          return h
+            .response({ message: "Tournament has not started" })
+            .code(400);
+        }
+
+        const existingTournament = await QuestionTournament.findOne({
+          where: { questions_id: questionId, tournament_id: tournamentId },
+          transaction,
+        });
+
+        if (!existingTournament) {
+          await transaction.rollback();
+          return h
+            .response({ message: "Question not available for this tournament" })
+            .code(400);
+        }
+
+        if (user.role !== "Admin") {
+          const userTeam = await User_Team.findOne({
+            where: { users_id: user.user_id },
+            include: [
+              {
+                model: Team,
+                as: "team",
+                attributes: ["id", "tournament_id", "name"],
+                where: { tournament_id: tournamentId },
+              },
+            ],
+            transaction,
+          });
+
+          if (!userTeam) {
+            await transaction.rollback();
+            return h
+              .response({ message: "User not in this tournament" })
+              .code(404);
+          }
+        }
       }
 
       const filePath = path.resolve(
@@ -2060,6 +2122,7 @@ const questionController = {
         question.file_path
       );
 
+      await transaction.commit();
       return h.file(filePath, {
         confine: false,
         mode: "attachment",
@@ -2069,72 +2132,225 @@ const questionController = {
         },
       });
     } catch (error) {
+      if (transaction) await transaction.rollback();
       return h.response({ message: error.message }).code(500);
     }
   },
   UseHint: async (request, h) => {
+    const transaction = await sequelize.transaction();
     try {
-      const HintId = parseInt(request.params.id, 10);
-      if (isNaN(HintId) || HintId <= 0) {
-        return h.response({ message: "Invalid hint ID" }).code(400);
-      }
+      const { id, tournament_id } = request.query;
+      const hintId = parseInt(id, 10);
 
-      const hint = await Hint.findOne({
-        where: { id: HintId },
-      });
-
-      if (!hint) {
-        return h.response({ message: "Hint not found" }).code(404);
+      if (isNaN(hintId) || hintId <= 0) {
+        return await transaction
+          .rollback()
+          .then(() => h.response({ message: "Invalid hint ID" }).code(400));
       }
 
       const token = request.state["cmu-oauth-token"];
       if (!token) {
-        return h.response({ message: "Unauthorized" }).code(401);
+        return await transaction
+          .rollback()
+          .then(() => h.response({ message: "Unauthorized" }).code(401));
       }
 
       const user = await authenticateUser(token);
       if (!user) {
-        return h.response({ message: "User not found" }).code(404);
+        return await transaction
+          .rollback()
+          .then(() => h.response({ message: "User not found" }).code(404));
+      }
+
+      const hint = await Hint.findOne({ where: { id: hintId }, transaction });
+      if (!hint) {
+        return await transaction
+          .rollback()
+          .then(() => h.response({ message: "Hint not found" }).code(404));
       }
 
       if (user.role === "Admin") {
+        await transaction.commit();
         return h.response({ data: hint.Description }).code(200);
       }
 
       const existingHintUsed = await HintUsed.findOne({
         where: { hint_id: hint.id, user_id: user.user_id },
+        transaction,
       });
 
       if (existingHintUsed) {
+        await transaction.commit();
         return h
-          .response({ message: "Hint already used", data: hint.Description })
+          .response({
+            message: "Hint already used",
+            data: hint.Description,
+          })
           .code(200);
+      }
+
+      const isTournamentQuestion = await QuestionTournament.findOne({
+        where: { questions_id: hint.question_id },
+        transaction,
+      });
+
+      if (isTournamentQuestion && !tournament_id && user.role !== "Admin") {
+        return await transaction
+          .rollback()
+          .then(() => h.response({ message: "Unauthorized" }).code(401));
+      }
+
+      if (tournament_id) {
+        const tournamentId = parseInt(tournament_id, 10);
+        if (isNaN(tournamentId) || tournamentId <= 0) {
+          return await transaction
+            .rollback()
+            .then(() =>
+              h.response({ message: "Invalid tournament ID" }).code(400)
+            );
+        }
+
+        const tournament = await Tournaments.findByPk(tournamentId, {
+          transaction,
+        });
+        if (!tournament) {
+          return await transaction
+            .rollback()
+            .then(() =>
+              h.response({ message: "Tournament not found" }).code(404)
+            );
+        }
+
+        const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
+        if (currentTime > tournament.event_endDate) {
+          return await transaction
+            .rollback()
+            .then(() =>
+              h.response({ message: "Tournament has ended" }).code(400)
+            );
+        }
+        if (currentTime < tournament.event_startDate) {
+          return await transaction
+            .rollback()
+            .then(() =>
+              h.response({ message: "Tournament has not started" }).code(400)
+            );
+        }
+
+        const existingTournament = await QuestionTournament.findOne({
+          where: {
+            questions_id: hint.question_id,
+            tournament_id: tournamentId,
+          },
+          transaction,
+        });
+
+        if (!existingTournament) {
+          return await transaction
+            .rollback()
+            .then(() =>
+              h
+                .response({ message: "Hint not available for this tournament" })
+                .code(400)
+            );
+        }
+
+        if (user.role !== "Admin") {
+          const userTeam = await User_Team.findOne({
+            where: { users_id: user.user_id },
+            include: [
+              {
+                model: Team,
+                as: "team",
+                attributes: ["id", "tournament_id", "name"],
+                where: { tournament_id: tournamentId },
+              },
+            ],
+            transaction,
+          });
+
+          if (!userTeam) {
+            return await transaction
+              .rollback()
+              .then(() =>
+                h.response({ message: "User not in this tournament" }).code(404)
+              );
+          }
+
+          const pointTournament = await TournamentPoints.findOne({
+            where: { users_id: userTeam.users_id, tournament_id: tournamentId },
+            transaction,
+          });
+
+          if (!pointTournament) {
+            return await transaction
+              .rollback()
+              .then(() => h.response({ message: "Point not found" }).code(404));
+          }
+
+          if (pointTournament.points < hint.point) {
+            return await transaction
+              .rollback()
+              .then(() =>
+                h.response({ message: "Not enough points" }).code(400)
+              );
+          }
+
+          pointTournament.points -= hint.point;
+          await pointTournament.save({ transaction });
+
+          await HintUsed.create(
+            { hint_id: hint.id, user_id: user.user_id },
+            { transaction }
+          );
+
+          await transaction.commit();
+          return h
+            .response({
+              message: "Hint used",
+              data: hint.Description,
+            })
+            .code(200);
+        }
+
+        await transaction.commit();
+        return h.response({ data: hint.Description }).code(200);
       }
 
       const point = await Point.findOne({
         where: { users_id: user.user_id },
+        transaction,
       });
 
       if (!point) {
-        return h.response({ message: "Point not found" }).code(404);
+        return await transaction
+          .rollback()
+          .then(() => h.response({ message: "Point not found" }).code(404));
       }
 
       if (point.points < hint.point) {
-        return h.response({ message: "Not enough points" }).code(400);
+        return await transaction
+          .rollback()
+          .then(() => h.response({ message: "Not enough points" }).code(400));
       }
 
       point.points -= hint.point;
-      await point.save();
+      await point.save({ transaction });
 
-      await HintUsed.create({
-        hint_id: hint.id,
-        user_id: user.user_id,
-      });
+      await HintUsed.create(
+        { hint_id: hint.id, user_id: user.user_id },
+        { transaction }
+      );
 
+      await transaction.commit();
       return h
-        .response({ message: "Hint used", data: hint.Description })
+        .response({
+          message: "Hint used",
+          data: hint.Description,
+        })
         .code(200);
     } catch (error) {
+      if (transaction) await transaction.rollback();
       return h.response({ message: error.message }).code(500);
     }
   },
