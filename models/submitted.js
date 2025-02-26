@@ -14,6 +14,7 @@ module.exports = (sequelize) => {
           key: "user_id",
         },
         unique: "user_question_unique",
+        primaryKey: true,
       },
       question_id: {
         type: DataTypes.INTEGER,
@@ -23,6 +24,7 @@ module.exports = (sequelize) => {
           key: "id",
         },
         unique: "user_question_unique",
+        primaryKey: true,
       },
     },
     {
@@ -32,7 +34,7 @@ module.exports = (sequelize) => {
   );
 
   Submitted.associate = function (models) {
-    Submitted.belongsTo(models.User, { foreignKey: "user_id" });
+    Submitted.belongsTo(models.User, { foreignKey: "users_id" });
     Submitted.belongsTo(models.Question, { foreignKey: "question_id" });
   };
 

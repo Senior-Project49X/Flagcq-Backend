@@ -553,7 +553,7 @@ const tournamentController = {
           createdAt: tournament.createdAt,
           updatedAt: tournament.updatedAt,
           hasJoined: !!userTeam,
-          teamId: userTeam ? userTeam.id : null,
+          teamId: userTeam ? userTeam.team_id : null,
           teamCount: tournament.Teams ? tournament.Teams.length : 0, // Now this will include all teams
         };
       });
@@ -680,6 +680,7 @@ const tournamentController = {
       // Find user's team_id in the specified tournament
       const userTeam = await Users_Team.findOne({
         where: { users_id: userId },
+        attributes: [],
         include: {
           model: Team,
           where: { tournament_id: id },
@@ -822,6 +823,7 @@ const tournamentController = {
       const teams = await Team.findAll({
         where: { tournament_id },
         attributes: ["id", "name"],
+        subQuery: false,
         include: [
           {
             model: TeamScores,
@@ -832,6 +834,7 @@ const tournamentController = {
           {
             model: Users_Team,
             as: "usersTeams",
+            attributes: [],
             include: [
               {
                 model: User,
@@ -848,6 +851,7 @@ const tournamentController = {
                 ],
               },
             ],
+            raw: true,
           },
         ],
       });
@@ -879,7 +883,6 @@ const tournamentController = {
 
       return h.response(response).code(200);
     } catch (error) {
-      console.error("Error retrieving teams:", error.message);
       return h
         .response({
           message: "Failed to retrieve team information.",
@@ -928,6 +931,7 @@ const tournamentController = {
       // First find the user's team
       const userTeam = await Users_Team.findOne({
         where: { users_id },
+        attributes: [],
         include: [
           {
             model: Team,
@@ -986,6 +990,7 @@ const tournamentController = {
           {
             model: Users_Team,
             as: "usersTeams",
+            attributes: ["user_id", "team_id"],
             include: [
               {
                 model: User,

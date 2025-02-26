@@ -413,6 +413,13 @@ const questionController = {
           question_tournament_id: questions.id,
           tournament_id: parsedTournamentId,
         },
+        attributes: [
+          "question_tournament_id",
+          "team_id",
+          "users_id",
+          "tournament_id",
+        ],
+        raw: true,
         transaction,
       });
 
@@ -593,6 +600,7 @@ const questionController = {
 
       const isSolved = await Submitted.findOne({
         where: { users_id: user.user_id, question_id: question.id },
+        attributes: ["question_id"],
       });
 
       const hintWithUsed =
@@ -648,6 +656,8 @@ const questionController = {
 
       return h.response(responseData).code(200);
     } catch (error) {
+      console.log(error);
+
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -789,6 +799,13 @@ const questionController = {
                     attributes: ["questions_id"],
                   },
                 ],
+                attributes: [
+                  "question_tournament_id",
+                  "team_id",
+                  "users_id",
+                  "tournament_id",
+                ],
+                raw: true,
               });
 
               TournamentSovledIds = TournamentSovled.map(
@@ -1331,7 +1348,12 @@ const questionController = {
           .code(400);
       }
 
-      if (await Submitted.findOne({ where: { question_id: questionId } })) {
+      if (
+        await Submitted.findOne({
+          where: { question_id: questionId },
+          attributes: ["question_id"],
+        })
+      ) {
         return h
           .response({ message: "Question has been submitted, cannot update" })
           .code(400);
@@ -1339,10 +1361,11 @@ const questionController = {
 
       if (
         await TournamentSubmitted.findOne({
-          attributes: ["id"],
+          attributes: ["question_tournament_id"],
           include: [
             { model: QuestionTournament, where: { questions_id: questionId } },
           ],
+          raw: true,
         })
       ) {
         return h
@@ -1358,6 +1381,9 @@ const questionController = {
       if (existingHint.length > 0) {
         const existingHintUsed = await HintUsed.findAll({
           where: { hint_id: { [Op.in]: existingHint.map((item) => item.id) } },
+          attributes: ["hint_id", "user_id", "team_id"],
+          raw: true,
+          transaction,
         });
         if (existingHintUsed.length > 0) {
           return h
@@ -1513,6 +1539,8 @@ const questionController = {
       return h.response(question).code(200);
     } catch (error) {
       if (transaction) await transaction.rollback();
+      console.log(error);
+
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -1561,6 +1589,7 @@ const questionController = {
 
       const existingHintUsed = await HintUsed.findAll({
         where: { hint_id: { [Op.in]: existingHints.map((item) => item.id) } },
+        attributes: ["hint_id", "user_id", "team_id"],
         transaction,
       });
 
@@ -1589,6 +1618,7 @@ const questionController = {
 
       const existingSubmitted = await Submitted.findAll({
         where: { question_id: question.id },
+        attributes: ["question_id"],
         transaction,
       });
 
@@ -1620,6 +1650,13 @@ const questionController = {
               [Op.in]: existingTournamentIds,
             },
           },
+          attributes: [
+            "question_tournament_id",
+            "team_id",
+            "users_id",
+            "tournament_id",
+          ],
+          raw: true,
           transaction,
         });
 
@@ -1677,6 +1714,7 @@ const questionController = {
       return h.response({ message: "Question has been deleted" }).code(200);
     } catch (error) {
       await transaction.rollback();
+      console.log(error);
 
       return h.response({ message: error.message }).code(500);
     }
@@ -1739,11 +1777,21 @@ const questionController = {
           return h.response({ message: "Point not found" }).code(404);
         }
 
+        if (user.role === "Admin") {
+          point.points += question.point;
+          await point.save({ transaction });
+
+          await transaction.commit();
+          return h.response({ message: "Correct", solve: true }).code(200);
+        }
+
         const existingSubmission = await Submitted.findOne({
           where: {
             users_id: user.user_id,
             question_id: question.id,
           },
+          attributes: ["question_id", "users_id"],
+          raw: true,
           transaction,
         });
 
@@ -1773,10 +1821,11 @@ const questionController = {
       }
     } catch (err) {
       await transaction.rollback();
+      console.log(err);
+
       return h.response({ message: "Internal Server Error" }).code(500);
     }
   },
-
   checkAnswerTournament: async (request, h) => {
     const transaction = await sequelize.transaction();
     try {
@@ -1800,13 +1849,28 @@ const questionController = {
         return h.response({ message: "Tournament not found" }).code(404);
       }
 
-      const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
-      if (currentTime > tournament.event_endDate) {
-        return h.response({ message: "Tournament has ended" }).code(400);
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      if (currentTime < tournament.event_startDate) {
-        return h.response({ message: "Tournament has not started" }).code(400);
+      const user = await authenticateUser(token);
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      if (user.role !== "Admin") {
+        const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
+
+        if (currentTime > tournament.event_endDate) {
+          return h.response({ message: "Tournament has ended" }).code(400);
+        }
+
+        if (currentTime < tournament.event_startDate) {
+          return h
+            .response({ message: "Tournament has not started" })
+            .code(400);
+        }
       }
 
       const question = await QuestionTournament.findOne({
@@ -1815,7 +1879,7 @@ const questionController = {
           {
             model: Question,
             as: "Question",
-            attributes: ["Answer", "point"],
+            attributes: ["Answer", "point", "Practice"],
           },
         ],
         transaction,
@@ -1831,70 +1895,70 @@ const questionController = {
           .code(400);
       }
 
-      const token = request.state["cmu-oauth-token"];
-      if (!token) {
-        return h.response({ message: "Unauthorized" }).code(401);
-      }
-
-      const user = await authenticateUser(token);
-      if (!user) {
-        return h.response({ message: "User not found" }).code(404);
-      }
-
       const secretKeyForAnswer = process.env.ANSWER_SECRET_KEY;
       const correctAnswer = await decryptData(
         question.Question.Answer,
         secretKeyForAnswer
       );
 
-      if (Answer === correctAnswer) {
-        if (user.role === "Admin") {
-          await transaction.commit();
-          return h.response({ message: "Correct", solve: true }).code(200);
-        }
+      if (user.role === "Admin") {
+        await transaction.commit();
+        return h
+          .response({
+            message: Answer === correctAnswer ? "Correct" : "Incorrect",
+            solve: Answer === correctAnswer,
+          })
+          .code(200);
+      }
 
-        const UserTeam = await User_Team.findOne({
-          where: { users_id: user.user_id },
-          include: [
-            {
-              model: Team,
-              as: "team",
-              attributes: ["id", "tournament_id", "name"],
-              where: { tournament_id: tournamentId },
-            },
-          ],
-          transaction,
-        });
-
-        if (!UserTeam) {
-          return h
-            .response({ message: "User not in this tournament" })
-            .code(404);
-        }
-
-        let point = await TournamentPoints.findOne({
-          where: { users_id: UserTeam.users_id, tournament_id: tournamentId },
-          transaction,
-        });
-
-        if (!point) {
-          return h.response({ message: "Point not found" }).code(404);
-        }
-
-        const existingSubmission = await TournamentSubmitted.findOne({
-          where: {
-            question_tournament_id: question.id,
-            team_id: UserTeam.team_id,
+      const UserTeam = await User_Team.findOne({
+        where: { users_id: user.user_id },
+        include: [
+          {
+            model: Team,
+            as: "team",
+            attributes: ["id", "tournament_id", "name"],
+            where: { tournament_id: tournamentId },
           },
-          transaction,
-        });
+        ],
+        transaction,
+      });
 
-        if (existingSubmission) {
-          return h
-            .response({ message: "Already submitted", solve: true })
-            .code(200);
-        }
+      if (!UserTeam) {
+        return h.response({ message: "User not in this tournament" }).code(404);
+      }
 
+      let point = await TournamentPoints.findOne({
+        where: { users_id: UserTeam.users_id, tournament_id: tournamentId },
+        transaction,
+      });
+
+      if (!point) {
+        return h.response({ message: "Point not found" }).code(404);
+      }
+
+      const existingSubmission = await TournamentSubmitted.findOne({
+        where: {
+          question_tournament_id: question.id,
+          team_id: UserTeam.team_id,
+        },
+        attributes: [
+          "question_tournament_id",
+          "team_id",
+          "users_id",
+          "tournament_id",
+        ],
+        raw: true,
+        transaction,
+      });
+
+      if (existingSubmission) {
+        return h
+          .response({ message: "Already submitted", solve: true })
+          .code(200);
+      }
+
+      if (Answer === correctAnswer) {
         await TournamentSubmitted.create(
           {
             users_id: UserTeam.users_id,
@@ -1930,6 +1994,7 @@ const questionController = {
       return h.response({ message: "Internal Server Error" }).code(500);
     }
   },
+
   downloadFile: async (request, h) => {
     const transaction = await sequelize.transaction();
     try {
@@ -2175,6 +2240,8 @@ const questionController = {
             hint_id: hint.id,
             team_id: userTeam.team_id,
           },
+          attributes: ["hint_id", "user_id", "team_id"],
+          raw: true,
           transaction,
         });
 
