@@ -4,8 +4,8 @@ const { table } = require("console");
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-  const TournamentSubmited = sequelize.define(
-    "TournamentSubmited",
+  const TournamentSubmitted = sequelize.define(
+    "TournamentSubmitted",
     {
       users_id: {
         type: DataTypes.UUID,
@@ -45,21 +45,21 @@ module.exports = (sequelize) => {
       },
     },
     {
-      tableName: "TournamentSubmited",
+      tableName: "TournamentSubmitted",
       timestamps: true,
     }
   );
 
-  TournamentSubmited.associate = function (models) {
-    TournamentSubmited.belongsTo(models.User, { foreignKey: "users_id" });
-    TournamentSubmited.belongsTo(models.Tournament, {
+  TournamentSubmitted.associate = function (models) {
+    TournamentSubmitted.belongsTo(models.User, { foreignKey: "users_id" });
+    TournamentSubmitted.belongsTo(models.Tournament, {
       foreignKey: "tournament_id",
     });
-    TournamentSubmited.belongsTo(models.QuestionTournament, {
+    TournamentSubmitted.belongsTo(models.QuestionTournament, {
       foreignKey: "question_tournament_id",
     });
-    TournamentSubmited.belongsTo(models.Team, { foreignKey: "team_id" });
+    TournamentSubmitted.belongsTo(models.Team, { foreignKey: "team_id" });
   };
 
-  return TournamentSubmited;
+  return TournamentSubmitted;
 };

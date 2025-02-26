@@ -15,12 +15,12 @@ const { log } = require("console");
 const {
   Question,
   User,
-  Submited,
+  Submitted,
   Point,
   Category,
   Tournament: Tournaments,
   QuestionTournament,
-  TournamentSubmited,
+  TournamentSubmitted,
   TournamentPoints,
   TeamScores,
   Hint,
@@ -35,23 +35,25 @@ const SORT_CONFIG = {
   FIELDS: {
     QuestionName: "title",
     Solved: "SolvedCount",
-    Difficulty: "difficultys_id",
+    Difficulty: "difficulty_id",
     Point: "point",
     Category: "name",
   },
   DEFAULT_ORDERS: {
     TOURNAMENT: [
-      [{ model: Question, as: "Question" }, "difficultys_id", "ASC"],
+      [{ model: Question, as: "Question" }, "difficulty_id", "ASC"],
       [{ model: Question, as: "Question" }, "categories_id", "ASC"],
       [{ model: Question, as: "Question" }, "id", "ASC"],
     ],
     PRACTICE: [
-      ["difficultys_id", "ASC"],
+      ["difficulty_id", "ASC"],
       ["categories_id", "ASC"],
       ["id", "ASC"],
     ],
   },
 };
+
+const UPLOAD_DIR = path.join(__dirname, "..", "uploads");
 
 const questionController = {
   createQuestion: async (request, h) => {
@@ -63,17 +65,15 @@ const questionController = {
         Description,
         Answer,
         point,
-        difficultys_id,
+        difficulty_id,
         file,
         Practice,
         Hints,
         Tournament,
       } = request.payload;
 
-      let ArrayHint;
-      try {
-        ArrayHint = JSON.parse(Hints);
-      } catch (error) {
+      let ArrayHint = safeParseJSON(Hints);
+      if (!ArrayHint) {
         return h.response({ message: "Invalid Hints format" }).code(400);
       }
 
@@ -87,8 +87,7 @@ const questionController = {
         return h.response({ message: "Invalid point" }).code(400);
       }
 
-      const validDifficulties = ["Easy", "Medium", "Hard"];
-      if (!title || !Description || !Answer || !difficultys_id) {
+      if (!title || !Description || !Answer || !difficulty_id) {
         return h.response({ message: "Missing required fields" }).code(400);
       }
 
@@ -114,7 +113,7 @@ const questionController = {
         return h.response({ message: "Failed to encrypt answer" }).code(500);
       }
 
-      if (!validDifficulties.includes(difficultys_id)) {
+      if (!isValidDifficulty(difficulty_id)) {
         return h
           .response({ message: "Invalid difficulty parameter" })
           .code(400);
@@ -146,14 +145,6 @@ const questionController = {
         return h.response({ message: "Topic already exists" }).code(409);
       }
 
-      const existingFile = await Question.findOne({
-        where: { file_path: file.filename },
-      });
-
-      if (existingFile) {
-        return h.response({ message: "File already exists" }).code(409);
-      }
-
       const category = await Category.findOne({
         where: { id: parsedCategoriesId },
         attributes: ["id"],
@@ -165,27 +156,13 @@ const questionController = {
 
       let file_path = null;
       if (file?.filename) {
-        const allowedFileTypes = [
-          "application/x-compressed",
-          "application/x-zip-compressed",
-        ];
-        if (!allowedFileTypes.includes(file.headers["content-type"])) {
-          return h.response({ message: "Invalid file type" }).code(400);
+        if (await isFileExists(file.filename)) {
+          return h.response({ message: "File already exists" }).code(409);
         }
-
-        const fileName = `${file.filename}`;
-        const uploadDirectory = path.join(__dirname, "..", "uploads");
-        const filePath = path.join(uploadDirectory, fileName);
-
         try {
-          await fs.promises.mkdir(uploadDirectory, { recursive: true });
-          await fs.promises.writeFile(
-            filePath,
-            await fs.promises.readFile(file.path)
-          );
-          file_path = fileName;
+          file_path = await uploadFile(file);
         } catch (err) {
-          return h.response({ message: "Failed to upload file" }).code(500);
+          return h.response({ message: err.message }).code(500);
         }
       }
 
@@ -220,7 +197,7 @@ const questionController = {
           Description: sanitizedDescription,
           Answer: encryptedAnswer,
           point: parsedPoint,
-          difficultys_id,
+          difficulty_id,
           file_path,
           Practice: isPractice,
           Tournament: isTournament,
@@ -431,7 +408,7 @@ const questionController = {
           .code(404);
       }
 
-      const existingSubmission = await TournamentSubmited.findAll({
+      const existingSubmission = await TournamentSubmitted.findAll({
         where: {
           question_tournament_id: questions.id,
           tournament_id: parsedTournamentId,
@@ -462,7 +439,7 @@ const questionController = {
           { where: { users_id: { [Op.in]: UserIds } }, transaction }
         );
 
-        await TournamentSubmited.destroy({
+        await TournamentSubmitted.destroy({
           where: {
             question_tournament_id: {
               [Op.in]: existingSubmission.map((s) => s.question_tournament_id),
@@ -614,7 +591,7 @@ const questionController = {
         order: [["id", "ASC"]],
       });
 
-      const isSolved = await Submited.findOne({
+      const isSolved = await Submitted.findOne({
         where: { users_id: user.user_id, question_id: question.id },
       });
 
@@ -637,7 +614,7 @@ const questionController = {
         description: question.Description,
         point: question.point,
         categories_name: question.Category?.name,
-        difficultys_id: question.difficultys_id,
+        difficulty_id: question.difficulty_id,
         file_path: question.file_path,
         author: question.createdBy,
       };
@@ -705,7 +682,7 @@ const questionController = {
 
       const limit = 12;
       const offset = (parsedPage - 1) * limit;
-      const validDifficulties = ["Easy", "Medium", "Hard"];
+
       const validModes = ["Practice", "Tournament"];
       let where = {};
       let question = {};
@@ -740,12 +717,12 @@ const questionController = {
         where.categories_id = { [Op.in]: categoryIds };
       }
       if (difficulty) {
-        if (!validDifficulties.includes(difficulty)) {
+        if (!isValidDifficulty(difficulty)) {
           return h
             .response({ message: "Invalid difficulty parameter" })
             .code(400);
         }
-        where.difficultys_id = difficulty;
+        where.difficulty_id = difficulty;
       }
 
       if (mode) {
@@ -803,7 +780,7 @@ const questionController = {
                   .code(404);
               }
 
-              const TournamentSovled = await TournamentSubmited.findAll({
+              const TournamentSovled = await TournamentSubmitted.findAll({
                 where: { team_id: Userteam.team_id },
                 include: [
                   {
@@ -838,7 +815,7 @@ const questionController = {
                         sequelize.literal(
                           `(
                                 SELECT CAST(COUNT(*) AS INTEGER)
-                                FROM public."TournamentSubmited" AS TS
+                                FROM public."TournamentSubmitted" AS TS
                                 JOIN public."QuestionTournaments" AS QT
                                 ON TS.question_tournament_id = QT.id
                                 WHERE QT.questions_id = "Question"."id"
@@ -867,7 +844,7 @@ const questionController = {
                 title: q.title,
                 point: q.point,
                 categories_name: q.Category?.name,
-                difficultys_id: q.difficultys_id,
+                difficulty_id: q.difficulty_id,
                 solved: TournamentSovledIds.includes(q.id),
                 submitCount: q.dataValues.SolvedCount || 0,
               };
@@ -902,8 +879,8 @@ const questionController = {
             [
               sequelize.literal(`(
             SELECT CAST(COUNT(*) AS INTEGER)
-            FROM public."Submited" AS Submited 
-            WHERE Submited.question_id = "Question".id
+            FROM public."Submitted" AS Submitted 
+            WHERE Submitted.question_id = "Question".id
             )`),
               "SolvedCount",
             ],
@@ -918,7 +895,7 @@ const questionController = {
         ],
       });
 
-      const solvedQuestions = await Submited.findAll({
+      const solvedQuestions = await Submitted.findAll({
         where: { users_id: user.user_id },
         attributes: ["question_id"],
       });
@@ -930,7 +907,7 @@ const questionController = {
         title: q.title,
         point: q.point,
         categories_name: q.Category?.name,
-        difficultys_id: q.difficultys_id,
+        difficulty_id: q.difficulty_id,
         author: q.createdBy,
         solved: solvedIds.includes(q.id),
         submitCount: q.dataValues.SolvedCount || 0,
@@ -988,7 +965,6 @@ const questionController = {
 
       const limit = 12;
       const offset = (parsedPage - 1) * limit;
-      const validDifficulties = ["Easy", "Medium", "Hard"];
       const validModes = ["Practice", "Tournament", "Unpublished"];
       let where = {};
       let question = {};
@@ -1023,12 +999,12 @@ const questionController = {
       }
 
       if (difficulty) {
-        if (!validDifficulties.includes(difficulty)) {
+        if (!isValidDifficulty(difficulty)) {
           return h
             .response({ message: "Invalid difficulty parameter" })
             .code(400);
         }
-        where.difficultys_id = difficulty;
+        where.difficulty_id = difficulty;
       }
 
       if (mode) {
@@ -1077,7 +1053,7 @@ const questionController = {
                           sequelize.literal(
                             `(
                               SELECT CAST(COUNT(*) AS INTEGER)
-                              FROM public."TournamentSubmited" AS TS
+                              FROM public."TournamentSubmitted" AS TS
                               JOIN public."QuestionTournaments" AS QT
                               ON TS.question_tournament_id = QT.id
                               WHERE QT.questions_id = "Question"."id"
@@ -1149,7 +1125,7 @@ const questionController = {
                     [
                       sequelize.literal(`(
                         SELECT CAST(COUNT(*) AS INTEGER)
-                        FROM public."TournamentSubmited" AS TS
+                        FROM public."TournamentSubmitted" AS TS
                         JOIN public."QuestionTournaments" AS QT ON TS.question_tournament_id = QT.id
                         WHERE QT.questions_id = "Question".id
                       )`),
@@ -1175,7 +1151,7 @@ const questionController = {
                 title: q.title,
                 point: q.point,
                 categories_name: q.Category?.name,
-                difficultys_id: q.difficultys_id,
+                difficulty_id: q.difficulty_id,
                 author: q.createdBy,
                 mode: "Tournament",
                 is_selected: questionIds.includes(q.id),
@@ -1215,15 +1191,15 @@ const questionController = {
             [
               sequelize.literal(`(
           SELECT CAST(COUNT(*) AS INTEGER) 
-          FROM public."Submited" AS Submited 
-          WHERE Submited.question_id = "Question".id
+          FROM public."Submitted" AS Submitted 
+          WHERE Submitted.question_id = "Question".id
           )`),
               "submitCount",
             ],
             [
               sequelize.literal(`(
           SELECT CAST(COUNT(*) AS INTEGER)
-          FROM public."TournamentSubmited" AS TS
+          FROM public."TournamentSubmitted" AS TS
           JOIN public."QuestionTournaments" AS QT ON TS.question_tournament_id = QT.id
           WHERE QT.questions_id = "Question".id
           )`),
@@ -1233,10 +1209,10 @@ const questionController = {
               sequelize.literal(`(
                 SELECT CAST(COUNT(*) AS INTEGER)
                 FROM (
-                  SELECT question_id as qid FROM public."Submited"
+                  SELECT question_id as qid FROM public."Submitted"
                   UNION ALL
                   SELECT QT.questions_id 
-                  FROM public."TournamentSubmited" AS TS
+                  FROM public."TournamentSubmitted" AS TS
                   JOIN public."QuestionTournaments" AS QT ON TS.question_tournament_id = QT.id
                 ) AS combined
                 WHERE combined.qid = "Question".id
@@ -1280,7 +1256,7 @@ const questionController = {
           title: q.title,
           point: q.point,
           categories_name: q.Category?.name || null,
-          difficultys_id: q.difficultys_id,
+          difficulty_id: q.difficulty_id,
           mode: mode,
           submitCount: submitCount,
           is_selected: is_selected,
@@ -1331,7 +1307,7 @@ const questionController = {
         Description,
         Answer,
         point,
-        difficultys_id,
+        difficulty_id,
         file,
         Practice,
         Tournament,
@@ -1344,10 +1320,8 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
-      let ArrayHint;
-      try {
-        ArrayHint = JSON.parse(Hints);
-      } catch (error) {
+      let ArrayHint = safeParseJSON(Hints);
+      if (!ArrayHint) {
         return h.response({ message: "Invalid Hints format" }).code(400);
       }
 
@@ -1357,14 +1331,14 @@ const questionController = {
           .code(400);
       }
 
-      if (await Submited.findOne({ where: { question_id: questionId } })) {
+      if (await Submitted.findOne({ where: { question_id: questionId } })) {
         return h
           .response({ message: "Question has been submitted, cannot update" })
           .code(400);
       }
 
       if (
-        await TournamentSubmited.findOne({
+        await TournamentSubmitted.findOne({
           attributes: ["id"],
           include: [
             { model: QuestionTournament, where: { questions_id: questionId } },
@@ -1416,54 +1390,17 @@ const questionController = {
 
       let file_path = question.file_path;
       if (file?.filename) {
-        if (
-          await Question.findOne({
-            where: { file_path: file.filename, id: { [Op.ne]: questionId } },
-          })
-        ) {
+        if (await isFileExists(file.filename)) {
           return h.response({ message: "File already exists" }).code(409);
         }
-
-        const allowedFileTypes = [
-          "application/x-compressed",
-          "application/x-zip-compressed",
-        ];
-        if (!allowedFileTypes.includes(file.headers["content-type"])) {
-          return h.response({ message: "Invalid file type" }).code(400);
-        }
-
-        if (question.file_path) {
-          try {
-            fs.unlinkSync(
-              path.join(__dirname, "..", "uploads", question.file_path)
-            );
-          } catch (err) {
-            console.warn("Failed to delete old file:", err);
-          }
-        }
-
-        const fileName = file.filename;
-        const uploadDirectory = path.join(__dirname, "..", "uploads");
-        const filePath = path.join(uploadDirectory, fileName);
-
         try {
-          await fs.promises.mkdir(uploadDirectory, { recursive: true });
-          await fs.promises.writeFile(
-            filePath,
-            await fs.promises.readFile(file.path)
-          );
-          file_path = fileName;
+          await deleteFile(question.file_path);
+          file_path = await uploadFile(file);
         } catch (err) {
-          return h.response({ message: "Failed to upload file" }).code(500);
+          return h.response({ message: err.message }).code(500);
         }
       } else if (isFileEdited === "true" && question.file_path) {
-        try {
-          fs.unlinkSync(
-            path.join(__dirname, "..", "uploads", question.file_path)
-          );
-        } catch (err) {
-          console.warn("Failed to delete old file:", err);
-        }
+        await deleteFile(question.file_path);
         file_path = null;
       }
 
@@ -1479,14 +1416,13 @@ const questionController = {
         question.categories_id = category.id;
       }
 
-      if (difficultys_id) {
-        const validDifficulties = ["Easy", "Medium", "Hard"];
-        if (!validDifficulties.includes(difficultys_id)) {
+      if (difficulty_id) {
+        if (!isValidDifficulty(difficulty_id)) {
           return h
             .response({ message: "Invalid difficulty parameter" })
             .code(400);
         }
-        question.difficultys_id = difficultys_id;
+        question.difficulty_id = difficulty_id;
       }
 
       if (Description) {
@@ -1609,22 +1545,12 @@ const questionController = {
       }
 
       if (question.file_path) {
-        const filePath = path.resolve(
-          __dirname,
-          "..",
-          "uploads",
-          question.file_path
-        );
-
         try {
-          await fs.promises.access(filePath);
-          await fs.promises.unlink(filePath);
-        } catch (err) {
-          if (err.code !== "ENOENT") {
-            return h
-              .response({ message: "Failed to delete associated file" })
-              .code(500);
-          }
+          await deleteFile(question.file_path);
+        } catch (error) {
+          return h
+            .response({ message: "Failed to delete associated file" })
+            .code(500);
         }
       }
 
@@ -1661,19 +1587,19 @@ const questionController = {
         });
       }
 
-      const existingSubmited = await Submited.findAll({
+      const existingSubmitted = await Submitted.findAll({
         where: { question_id: question.id },
         transaction,
       });
 
-      if (existingSubmited.length > 0) {
-        const UserIds = existingSubmited.map((item) => item.users_id);
+      if (existingSubmitted.length > 0) {
+        const UserIds = existingSubmitted.map((item) => item.users_id);
         await Point.update(
           { points: sequelize.literal("points - " + question.point) },
           { where: { users_id: { [Op.in]: UserIds } }, transaction }
         );
 
-        await Submited.destroy({
+        await Submitted.destroy({
           where: { question_id: question.id },
           transaction,
         });
@@ -1688,7 +1614,7 @@ const questionController = {
         const existingTournamentIds = existingTournaments.map(
           (item) => item.id
         );
-        const existingTournamentSubmited = await TournamentSubmited.findAll({
+        const existingTournamentSubmitted = await TournamentSubmitted.findAll({
           where: {
             question_tournament_id: {
               [Op.in]: existingTournamentIds,
@@ -1697,12 +1623,12 @@ const questionController = {
           transaction,
         });
 
-        if (existingTournamentSubmited.length > 0) {
-          const TeamIds = existingTournamentSubmited.map(
+        if (existingTournamentSubmitted.length > 0) {
+          const TeamIds = existingTournamentSubmitted.map(
             (item) => item.team_id
           );
 
-          const UserIds = existingTournamentSubmited.map(
+          const UserIds = existingTournamentSubmitted.map(
             (item) => item.users_id
           );
           await TeamScores.update(
@@ -1731,7 +1657,7 @@ const questionController = {
             }
           );
 
-          await TournamentSubmited.destroy({
+          await TournamentSubmitted.destroy({
             where: {
               question_tournament_id: { [Op.in]: existingTournamentIds },
             },
@@ -1813,7 +1739,7 @@ const questionController = {
           return h.response({ message: "Point not found" }).code(404);
         }
 
-        const existingSubmission = await Submited.findOne({
+        const existingSubmission = await Submitted.findOne({
           where: {
             users_id: user.user_id,
             question_id: question.id,
@@ -1828,7 +1754,7 @@ const questionController = {
             .code(200);
         }
 
-        await Submited.create(
+        await Submitted.create(
           {
             users_id: user.user_id,
             question_id: question.id,
@@ -1955,7 +1881,7 @@ const questionController = {
           return h.response({ message: "Point not found" }).code(404);
         }
 
-        const existingSubmission = await TournamentSubmited.findOne({
+        const existingSubmission = await TournamentSubmitted.findOne({
           where: {
             question_tournament_id: question.id,
             team_id: UserTeam.team_id,
@@ -1969,7 +1895,7 @@ const questionController = {
             .code(200);
         }
 
-        await TournamentSubmited.create(
+        await TournamentSubmitted.create(
           {
             users_id: UserTeam.users_id,
             question_tournament_id: question.id,
@@ -2143,50 +2069,31 @@ const questionController = {
       const hintId = parseInt(id, 10);
 
       if (isNaN(hintId) || hintId <= 0) {
-        return await transaction
-          .rollback()
-          .then(() => h.response({ message: "Invalid hint ID" }).code(400));
+        await transaction.rollback();
+        return h.response({ message: "Invalid hint ID" }).code(400);
       }
 
       const token = request.state["cmu-oauth-token"];
       if (!token) {
-        return await transaction
-          .rollback()
-          .then(() => h.response({ message: "Unauthorized" }).code(401));
+        await transaction.rollback();
+        return h.response({ message: "Unauthorized" }).code(401);
       }
 
       const user = await authenticateUser(token);
       if (!user) {
-        return await transaction
-          .rollback()
-          .then(() => h.response({ message: "User not found" }).code(404));
+        await transaction.rollback();
+        return h.response({ message: "User not found" }).code(404);
       }
 
       const hint = await Hint.findOne({ where: { id: hintId }, transaction });
       if (!hint) {
-        return await transaction
-          .rollback()
-          .then(() => h.response({ message: "Hint not found" }).code(404));
+        await transaction.rollback();
+        return h.response({ message: "Hint not found" }).code(404);
       }
 
       if (user.role === "Admin") {
         await transaction.commit();
         return h.response({ data: hint.Description }).code(200);
-      }
-
-      const existingHintUsed = await HintUsed.findOne({
-        where: { hint_id: hint.id, user_id: user.user_id },
-        transaction,
-      });
-
-      if (existingHintUsed) {
-        await transaction.commit();
-        return h
-          .response({
-            message: "Hint already used",
-            data: hint.Description,
-          })
-          .code(200);
       }
 
       const isTournamentQuestion = await QuestionTournament.findOne({
@@ -2195,46 +2102,37 @@ const questionController = {
       });
 
       if (isTournamentQuestion && !tournament_id && user.role !== "Admin") {
-        return await transaction
-          .rollback()
-          .then(() => h.response({ message: "Unauthorized" }).code(401));
+        await transaction.rollback();
+        return h.response({ message: "Unauthorized" }).code(401);
       }
 
+      let tournamentId = null;
+
       if (tournament_id) {
-        const tournamentId = parseInt(tournament_id, 10);
+        tournamentId = parseInt(tournament_id, 10);
         if (isNaN(tournamentId) || tournamentId <= 0) {
-          return await transaction
-            .rollback()
-            .then(() =>
-              h.response({ message: "Invalid tournament ID" }).code(400)
-            );
+          await transaction.rollback();
+          return h.response({ message: "Invalid tournament ID" }).code(400);
         }
 
         const tournament = await Tournaments.findByPk(tournamentId, {
           transaction,
         });
         if (!tournament) {
-          return await transaction
-            .rollback()
-            .then(() =>
-              h.response({ message: "Tournament not found" }).code(404)
-            );
+          await transaction.rollback();
+          return h.response({ message: "Tournament not found" }).code(404);
         }
 
         const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
         if (currentTime > tournament.event_endDate) {
-          return await transaction
-            .rollback()
-            .then(() =>
-              h.response({ message: "Tournament has ended" }).code(400)
-            );
+          await transaction.rollback();
+          return h.response({ message: "Tournament has ended" }).code(400);
         }
         if (currentTime < tournament.event_startDate) {
-          return await transaction
-            .rollback()
-            .then(() =>
-              h.response({ message: "Tournament has not started" }).code(400)
-            );
+          await transaction.rollback();
+          return h
+            .response({ message: "Tournament has not started" })
+            .code(400);
         }
 
         const existingTournament = await QuestionTournament.findOne({
@@ -2246,108 +2144,103 @@ const questionController = {
         });
 
         if (!existingTournament) {
-          return await transaction
-            .rollback()
-            .then(() =>
-              h
-                .response({ message: "Hint not available for this tournament" })
-                .code(400)
-            );
-        }
-
-        if (user.role !== "Admin") {
-          const userTeam = await User_Team.findOne({
-            where: { users_id: user.user_id },
-            include: [
-              {
-                model: Team,
-                as: "team",
-                attributes: ["id", "tournament_id", "name"],
-                where: { tournament_id: tournamentId },
-              },
-            ],
-            transaction,
-          });
-
-          if (!userTeam) {
-            return await transaction
-              .rollback()
-              .then(() =>
-                h.response({ message: "User not in this tournament" }).code(404)
-              );
-          }
-
-          const pointTournament = await TournamentPoints.findOne({
-            where: { users_id: userTeam.users_id, tournament_id: tournamentId },
-            transaction,
-          });
-
-          if (!pointTournament) {
-            return await transaction
-              .rollback()
-              .then(() => h.response({ message: "Point not found" }).code(404));
-          }
-
-          if (pointTournament.points < hint.point) {
-            return await transaction
-              .rollback()
-              .then(() =>
-                h.response({ message: "Not enough points" }).code(400)
-              );
-          }
-
-          pointTournament.points -= hint.point;
-          await pointTournament.save({ transaction });
-
-          await HintUsed.create(
-            { hint_id: hint.id, user_id: user.user_id },
-            { transaction }
-          );
-
-          await transaction.commit();
+          await transaction.rollback();
           return h
-            .response({
-              message: "Hint used",
-              data: hint.Description,
-            })
-            .code(200);
+            .response({ message: "Hint not available for this tournament" })
+            .code(400);
         }
+
+        const userTeam = await User_Team.findOne({
+          where: { users_id: user.user_id },
+          include: [
+            {
+              model: Team,
+              as: "team",
+              attributes: ["id", "tournament_id", "name"],
+              where: { tournament_id: tournamentId },
+            },
+          ],
+          transaction,
+        });
+
+        if (!userTeam) {
+          await transaction.rollback();
+          return h
+            .response({ message: "User not in this tournament" })
+            .code(404);
+        }
+
+        const existingHintUsedTournament = await HintUsed.findOne({
+          where: {
+            hint_id: hint.id,
+            team_id: userTeam.team_id,
+          },
+          transaction,
+        });
+
+        if (existingHintUsedTournament) {
+          await transaction.commit();
+          return h.response({ data: hint.Description }).code(200);
+        }
+
+        const pointTournament = await TournamentPoints.findOne({
+          where: { users_id: userTeam.users_id, tournament_id: tournamentId },
+          transaction,
+        });
+
+        if (!pointTournament) {
+          await transaction.rollback();
+          return h.response({ message: "Point not found" }).code(404);
+        }
+
+        if (pointTournament.points < hint.point) {
+          await transaction.rollback();
+          return h.response({ message: "Not enough points" }).code(400);
+        }
+
+        pointTournament.points -= hint.point;
+        await pointTournament.save({ transaction });
+
+        await HintUsed.create(
+          {
+            hint_id: hint.id,
+            user_id: user.user_id,
+            team_id: userTeam.team_id,
+          },
+          { transaction }
+        );
 
         await transaction.commit();
-        return h.response({ data: hint.Description }).code(200);
+        return h
+          .response({ message: "Hint used", data: hint.Description })
+          .code(200);
       }
 
       const point = await Point.findOne({
         where: { users_id: user.user_id },
         transaction,
       });
-
       if (!point) {
-        return await transaction
-          .rollback()
-          .then(() => h.response({ message: "Point not found" }).code(404));
+        await transaction.rollback();
+        return h.response({ message: "Point not found" }).code(404);
       }
 
       if (point.points < hint.point) {
-        return await transaction
-          .rollback()
-          .then(() => h.response({ message: "Not enough points" }).code(400));
+        await transaction.rollback();
+        return h.response({ message: "Not enough points" }).code(400);
       }
 
       point.points -= hint.point;
       await point.save({ transaction });
 
       await HintUsed.create(
-        { hint_id: hint.id, user_id: user.user_id },
+        { hint_id: hint.id, user_id: user.user_id, team_id: null },
         { transaction }
       );
 
       await transaction.commit();
       return h
-        .response({
-          message: "Hint used",
-          data: hint.Description,
-        })
+        .response({ message: "Hint used", data: hint.Description })
         .code(200);
     } catch (error) {
       if (transaction) await transaction.rollback();
@@ -2465,4 +2358,65 @@ async function getHashedKey(text) {
   return crypto.createHash("sha256").update(text).digest();
 }
 
+async function uploadFile(file) {
+  if (!file) return null;
+
+  const allowedFileTypes = [
+    "application/x-compressed",
+    "application/x-zip-compressed",
+    "application/gzip",
+  ];
+
+  if (!allowedFileTypes.includes(file.headers["content-type"])) {
+    throw new Error("Invalid file type");
+  }
+
+  const fileName = file.filename;
+  const filePath = path.join(UPLOAD_DIR, fileName);
+
+  try {
+    await fs.promises.mkdir(UPLOAD_DIR, { recursive: true });
+    await fs.promises.writeFile(
+      filePath,
+      await fs.promises.readFile(file.path)
+    );
+    return fileName;
+  } catch (err) {
+    throw new Error("Failed to upload file");
+  }
+}
+
+async function deleteFile(filePath) {
+  if (!filePath) return;
+
+  try {
+    const fullPath = path.join(UPLOAD_DIR, filePath);
+    await fs.promises.access(fullPath);
+    await fs.promises.unlink(fullPath);
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      throw new Error("Failed to delete file");
+    }
+  }
+}
+
+async function isFileExists(filename) {
+  const existingFile = await Question.findOne({
+    where: { file_path: filename },
+  });
+  return !!existingFile;
+}
+
+function safeParseJSON(jsonString) {
+  try {
+    return JSON.parse(jsonString);
+  } catch (error) {
+    return null;
+  }
+}
+
+function isValidDifficulty(difficulty) {
+  const validDifficulties = ["Easy", "Medium", "Hard"];
+  return validDifficulties.includes(String(difficulty));
+}
 module.exports = questionController;

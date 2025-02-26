@@ -4,7 +4,7 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable(
-      "TournamentSubmited",
+      "TournamentSubmitted",
       {
         users_id: {
           type: Sequelize.UUID,
@@ -74,6 +74,6 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable("TournamentSubmited");
+    await queryInterface.dropTable("TournamentSubmitted");
   },
 };

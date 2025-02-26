@@ -72,7 +72,7 @@ module.exports = (sequelize) => {
       foreignKey: "tournament_id",
     });
     Tournament.hasMany(models.TeamScores, { foreignKey: "tournament_id" });
-    Tournament.hasMany(models.TournamentSubmited, {
+    Tournament.hasMany(models.TournamentSubmitted, {
       foreignKey: "tournament_id",
     });
     Tournament.hasMany(models.QuestionTournament, {

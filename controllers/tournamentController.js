@@ -339,7 +339,7 @@ const tournamentController = {
           include: {
             model: Users_Team,
             as: "usersTeams",
-            attributes: ["team_id"],
+            attributes: [],
             where: { users_id: userId },
             required: false,
           },
@@ -351,6 +351,7 @@ const tournamentController = {
         const userTeam = (tournament.Teams || []).find(
           (team) => team.usersTeams && team.usersTeams.length > 0
         );
+
         const isPrivate = tournament.mode.toLowerCase() === "private";
 
         return {
@@ -367,7 +368,7 @@ const tournamentController = {
           createdAt: tournament.createdAt,
           updatedAt: tournament.updatedAt,
           hasJoined: !!userTeam,
-          teamId: userTeam ? userTeam.id : null,
+          teamId: userTeam ? userTeam.team_id : null,
           teamCount: tournament.Teams ? tournament.Teams.length : 0,
           joinCode: isPrivate ? tournament.joinCode : null,
         };

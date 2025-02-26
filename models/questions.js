@@ -32,7 +32,7 @@ module.exports = (sequelize) => {
         type: DataTypes.INTEGER,
         allowNull: false,
       },
-      difficultys_id: {
+      difficulty_id: {
         type: DataTypes.ENUM("Easy", "Medium", "Hard"),
         allowNull: false,
       },
@@ -63,7 +63,7 @@ module.exports = (sequelize) => {
 
   Question.associate = function (models) {
     Question.belongsTo(models.Category, { foreignKey: "categories_id" });
-    Question.hasMany(models.Submited, { foreignKey: "question_id" });
+    Question.hasMany(models.Submitted, { foreignKey: "question_id" });
     Question.hasMany(models.QuestionTournament, { foreignKey: "questions_id" });
   };
 

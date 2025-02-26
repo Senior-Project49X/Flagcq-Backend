@@ -31,7 +31,7 @@ const QuestionTournament = require("./questionstournament")(
   Sequelize.DataTypes
 );
 const User = require("./users")(sequelize, Sequelize.DataTypes);
-const Submited = require("./submited")(sequelize, Sequelize.DataTypes);
+const Submitted = require("./submitted")(sequelize, Sequelize.DataTypes);
 const Team = require("./teams")(sequelize, Sequelize.DataTypes);
 const Users_Team = require("./users_team")(sequelize, Sequelize.DataTypes);
 const TeamScores = require("./teamscores")(sequelize, Sequelize.DataTypes);
@@ -40,7 +40,7 @@ const TournamentPoints = require("./tournamentpoints")(
   sequelize,
   Sequelize.DataTypes
 );
-const TournamentSubmited = require("./tournamentsubmited")(
+const TournamentSubmitted = require("./tournamentsubmitted")(
   sequelize,
   Sequelize.DataTypes
 );
@@ -52,13 +52,13 @@ db.Point = Point;
 db.Question = Question;
 db.QuestionTournament = QuestionTournament;
 db.User = User;
-db.Submited = Submited;
+db.Submitted = Submitted;
 db.Team = Team;
 db.Users_Team = Users_Team;
 db.TeamScores = TeamScores;
 db.Tournament = Tournament;
 db.TournamentPoints = TournamentPoints;
-db.TournamentSubmited = TournamentSubmited;
+db.TournamentSubmitted = TournamentSubmitted;
 db.Hint = Hint;
 db.HintUsed = HintUsed;
 

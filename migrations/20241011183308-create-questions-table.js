@@ -32,7 +32,7 @@ module.exports = {
         type: Sequelize.INTEGER,
         allowNull: false,
       },
-      difficultys_id: {
+      difficulty_id: {
         type: Sequelize.ENUM("Easy", "Medium", "Hard"),
         allowNull: false,
       },

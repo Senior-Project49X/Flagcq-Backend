@@ -1,23 +1,26 @@
 "use strict";
 
+require("dotenv").config();
 const Hapi = require("@hapi/hapi");
 const db = require("./models");
 const sequelize = db.sequelize;
 const categoryRoute = require("./routes/categoryRoutes");
 const userRoute = require("./routes/userRoute");
 const questionRoute = require("./routes/questionRoutes");
-const teamRoute = require("./routes/teamRoutes"); // Import your team routes
+const teamRoute = require("./routes/teamRoutes");
 const Inert = require("@hapi/inert");
 const lbRoute = require("./routes/lbRoute");
 const tournamentRoutes = require("./routes/tournamentRoutes");
 
 const init = async () => {
   const server = Hapi.server({
-    port: 3001,
-    host: "localhost",
+    port: process.env.SERVER_PORT || 3001,
+    host: process.env.SERVER_HOST || "localhost",
     routes: {
       cors: {
-        origin: ["http://localhost:3000" , "http://localhost:5173"],
+        origin: process.env.ALLOWED_ORIGINS
+          ? process.env.ALLOWED_ORIGINS.split(",")
+          : ["http://localhost:3000"],
         headers: [
           "Accept",
           "Authorization",
@@ -61,41 +64,32 @@ const init = async () => {
 
   try {
     await sequelize.authenticate();
-    console.log("Connection has been established successfully.");
+    console.log("✅ Database connected successfully.");
   } catch (error) {
-    console.error("Unable to connect to the database:", error);
-    process.exit(1);
+    console.error("❌ Database connection failed:", error);
+    return;
   }
-  await server
-    .register(Inert)
-    .then(() => {
-      console.log("Inert plugin registered successfully");
-    })
-    .catch((err) => {
-      console.error("Failed to register Inert:", err);
-    });
 
-  await sequelize.sync({ alter: true });
+  await server.register(Inert);
+  console.log("✅ Inert plugin registered successfully");
 
   server.route(categoryRoute);
   server.route(userRoute);
   server.route(questionRoute);
-  server.route(teamRoute); // Add the team routes
-  server.route(lbRoute); // Add Leaderboard routes
+  server.route(teamRoute);
+  server.route(lbRoute);
   server.route(tournamentRoutes);
 
   await server.start();
-  console.log("Server running on %s", server.info.uri);
+  console.log("🚀 Server running on %s", server.info.uri);
 };
 
 process.on("unhandledRejection", (err) => {
-  console.error("Unhandled Rejection:", err);
-  process.exit(1);
+  console.error("⚠️ Unhandled Rejection:", err);
 });
 
 process.on("uncaughtException", (err) => {
-  console.error("Uncaught Exception:", err);
-  process.exit(1);
+  console.error("🔥 Uncaught Exception:", err);
 });
 
 init();

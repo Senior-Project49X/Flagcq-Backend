@@ -3,8 +3,8 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-  const Submited = sequelize.define(
-    "Submited",
+  const Submitted = sequelize.define(
+    "Submitted",
     {
       users_id: {
         type: DataTypes.UUID,
@@ -26,15 +26,15 @@ module.exports = (sequelize) => {
       },
     },
     {
-      tableName: "Submited",
+      tableName: "Submitted",
       timestamps: true,
     }
   );
 
-  Submited.associate = function (models) {
-    Submited.belongsTo(models.User, { foreignKey: "user_id" });
-    Submited.belongsTo(models.Question, { foreignKey: "question_id" });
+  Submitted.associate = function (models) {
+    Submitted.belongsTo(models.User, { foreignKey: "user_id" });
+    Submitted.belongsTo(models.Question, { foreignKey: "question_id" });
   };
 
-  return Submited;
+  return Submitted;
 };

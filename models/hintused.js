@@ -26,6 +26,24 @@ module.exports = (sequelize) => {
         onUpdate: "CASCADE",
         unique: "unique_hint_used",
       },
+      team_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: "Teams",
+          key: "id",
+        },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
     },
     {
       tableName: "Hint_Used",
@@ -36,6 +54,7 @@ module.exports = (sequelize) => {
   HintUsed.associate = function (models) {
     HintUsed.belongsTo(models.Hint, { foreignKey: "hint_id" });
     HintUsed.belongsTo(models.User, { foreignKey: "user_id" });
+    HintUsed.belongsTo(models.Team, { foreignKey: "team_id" });
   };
 
   return HintUsed;

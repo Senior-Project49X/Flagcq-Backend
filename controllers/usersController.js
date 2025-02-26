@@ -6,10 +6,6 @@ const jwt = require("jsonwebtoken");
 const axios = require("axios");
 const User = db.User;
 const Point = db.Point;
-const Team = db.Team;
-const User_Team = db.Users_Team;
-const TournamentPoints = db.TournamentPoints;
-const { Op, where } = require("sequelize");
 
 const usersController = {
   EntraLogin: async (request, h) => {
@@ -128,6 +124,7 @@ const usersController = {
 
       const point = await Point.findOne({
         where: { users_id: user.user_id },
+        attributes: ["points"],
       });
 
       if (!point) {
@@ -166,62 +163,7 @@ const usersController = {
       return h.response({ error: "Get user failed" }).code(500);
     }
   },
-  getUserTournament: async (request, h) => {
-    try {
-      const tournamentId = request.params.id;
-      const parsedId = parseInt(tournamentId, 10);
-      if (isNaN(parsedId) || parsedId < 1) {
-        return h.response({ message: "Invalid tournament id" }).code(400);
-      }
 
-      const token = request.state["cmu-oauth-token"];
-      if (!token) {
-        return h.response({ message: "Unauthorized" }).code(401);
-      }
-
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: { itaccount: decoded.email },
-      });
-
-      if (!user) {
-        return h.response({ message: "User not found" }).code(404);
-      }
-
-      const point = await TournamentPoints.findOne({
-        where: { users_id: user.user_id, tournament_id: parsedId },
-      });
-
-      if (!point) {
-        return h.response({ message: "Points not found" }).code(404);
-      }
-
-      return h
-        .response({
-          first_name: decoded.first_name,
-          last_name: decoded.last_name,
-          AccType: decoded.AccType,
-          faculty: decoded.faculty,
-          student_id: decoded.student_id,
-          points: point.points,
-        })
-        .code(200);
-    } catch (err) {
-      console.error(err);
-      if (err.name === "TokenExpiredError") {
-        return h.response({ message: "Token expired" }).code(401);
-      } else if (err.name === "JsonWebTokenError") {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-      return h.response({ error: "Get user failed" }).code(500);
-    }
-  },
   testToken: async (request, h) => {
     try {
       const { token } = request.payload;

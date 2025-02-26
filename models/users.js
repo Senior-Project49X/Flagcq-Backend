@@ -50,7 +50,7 @@ module.exports = (sequelize) => {
 
   User.associate = function (models) {
     User.hasMany(models.Point, { foreignKey: "users_id" });
-    User.hasMany(models.Submited, { foreignKey: "users_id" });
+    User.hasMany(models.Submitted, { foreignKey: "users_id" });
     User.hasMany(models.TournamentPoints, {
       foreignKey: "users_id",
       as: "tournamentPoints",

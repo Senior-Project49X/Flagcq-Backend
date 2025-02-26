@@ -35,13 +35,13 @@ module.exports = {
         allowNull: false,
       },
       mode: {
-        type: Sequelize.ENUM('Public', 'Private'),
+        type: Sequelize.ENUM("Public", "Private"),
         allowNull: false,
       },
       teamSizeLimit: {
         type: Sequelize.INTEGER,
         allowNull: true,
-        defaultValue: 4, 
+        defaultValue: 4,
       },
       teamLimit: {
         type: Sequelize.INTEGER,
@@ -56,6 +56,14 @@ module.exports = {
         type: Sequelize.STRING(6),
         allowNull: true,
         unique: true,
+      },
+      createdAt: {
+        allowNull: false,
+        type: Sequelize.DATE,
+      },
+      updatedAt: {
+        allowNull: false,
+        type: Sequelize.DATE,
       },
     });
   },

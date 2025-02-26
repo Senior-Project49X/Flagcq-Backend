@@ -27,6 +27,16 @@ module.exports = {
           onDelete: "CASCADE",
           primaryKey: true,
         },
+        team_id: {
+          type: Sequelize.INTEGER,
+          allowNull: true,
+          references: {
+            model: "Teams",
+            key: "id",
+          },
+          onUpdate: "CASCADE",
+          onDelete: "CASCADE",
+        },
         createdAt: {
           type: Sequelize.DATE,
           allowNull: false,
@@ -39,7 +49,7 @@ module.exports = {
       {
         uniqueKeys: {
           unique_hint_used: {
-            fields: ["hint_id", "user_id"],
+            fields: ["hint_id", "user_id", "team_id"],
           },
         },
       }
