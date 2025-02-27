@@ -36,23 +36,7 @@ const teamController = {
           .code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h
-          .response({ message: "Unauthorized: Invalid token." })
-          .code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
@@ -151,124 +135,8 @@ const teamController = {
       await TournamentPoints.create({
         users_id: user_id,
         tournament_id,
+        team_id: newTeam.id,
         points: 0,
-      });
-
-      return h
-        .response({
-          message: "Team created successfully",
-          team: newTeam,
-        })
-        .code(201);
-    } catch (error) {
-      console.error("Error creating team:", error.message);
-      return h
-        .response({
-          message: "Failed to create team",
-          error: error.message,
-        })
-        .code(500);
-    }
-  },
-
-  //
-  createTeamMock: async (req, h) => {
-    try {
-      const { name, tournament_id, user_id } = req.payload;
-
-      if (!name || !tournament_id || !user_id) {
-        return h
-          .response({
-            message: "Name, Tournament ID, and User ID are required.",
-          })
-          .code(400);
-      }
-
-      // Retrieve the user directly by user_id (for testing purposes, bypass token verification)
-      const user = await User.findOne({
-        where: { user_id },
-      });
-
-      if (!user) {
-        return h.response({ message: "User not found." }).code(404);
-      }
-
-      // Check if the user is already in a team for this tournament
-      const userAlreadyInTeam = await Users_Team.findOne({
-        include: [
-          {
-            model: Team,
-            as: "team",
-            where: { tournament_id },
-          },
-        ],
-        where: { users_id: user_id },
-      });
-
-      if (userAlreadyInTeam) {
-        return h
-          .response({
-            message: "User is already in a team for this tournament.",
-          })
-          .code(400);
-      }
-
-      // Check if a team with the same name already exists
-      const existingTeam = await Team.findOne({
-        where: { name, tournament_id },
-      });
-
-      if (existingTeam) {
-        return h
-          .response({
-            message: "A team with this name already exists in the tournament.",
-          })
-          .code(400);
-      }
-
-      const tournament = await Tournament.findOne({
-        where: { id: tournament_id },
-      });
-
-      if (!tournament) {
-        return h.response({ message: "Tournament not found." }).code(404);
-      }
-
-      const existingTeamCount = await Team.count({ where: { tournament_id } });
-      // console.log(existingTeamCount);
-      if (existingTeamCount >= tournament.teamLimit) {
-        return h
-          .response({
-            message: "The team limit for this tournament has been reached.",
-          })
-          .code(400);
-      }
-
-      // Create the team
-      const newTeam = await Team.create({
-        name,
-        tournament_id,
-        invite_code: teamController.generateInviteCode(),
-      });
-
-      // Add the creator to the team in Users_Team
-      await Users_Team.create({
-        users_id: user_id,
-        team_id: newTeam.id,
-      });
-
-      // Initialize the team score in TeamScores
-      await TeamScores.create({
-        team_id: newTeam.id,
-        tournament_id,
-        total_points: 0,
-      });
-
-      // Initialize individual score for the creator in TournamentPoints
-      await TournamentPoints.create({
-        users_id: user_id,
-        tournament_id,
-        points: 0, // Set points to 0
       });
 
       return h
@@ -304,23 +172,7 @@ const teamController = {
           .code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h
-          .response({ message: "Unauthorized: Invalid token." })
-          .code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
@@ -388,6 +240,7 @@ const teamController = {
         await TournamentPoints.create({
           users_id: user_id,
           tournament_id: privateTournament.id,
+          team_id: team.id,
           points: 0,
         });
 
@@ -430,18 +283,23 @@ const teamController = {
       }
 
       const existingTeamMembership = await Users_Team.findOne({
-        include: [{
-          model: Team,
-          where: { tournament_id: team.tournament_id },
-          as: "team",
-        }],
-        where: { users_id: user_id }
+        include: [
+          {
+            model: Team,
+            where: { tournament_id: team.tournament_id },
+            as: "team",
+          },
+        ],
+        where: { users_id: user_id },
       });
-      
+
       if (existingTeamMembership) {
-        return h.response({ 
-          message: "You are already a member of another team in this tournament." 
-        }).code(400);
+        return h
+          .response({
+            message:
+              "You are already a member of another team in this tournament.",
+          })
+          .code(400);
       }
 
       // Check if the team has reached the limit
@@ -459,6 +317,7 @@ const teamController = {
       await TournamentPoints.create({
         users_id: user_id,
         tournament_id: team.tournament_id,
+        team_id: team.id,
         points: 0,
       });
 
@@ -469,85 +328,6 @@ const teamController = {
       console.error("Error joining team:", error.message);
       return h
         .response({ message: "Failed to join team", error: error.message })
-        .code(500);
-    }
-  },
-
-  // Join Team function (for testing with fake users_id)
-  joinFakeTeam: async (req, h) => {
-    try {
-      const { invite_code, users_id } = req.payload; // Using fake users_id from the request
-
-      if (!invite_code || !users_id) {
-        return h
-          .response({ message: "Invite code and users_id are required." })
-          .code(400);
-      }
-
-      // Find the team by invite code
-      const team = await Team.findOne({ where: { invite_code } });
-
-      if (!team) {
-        return h
-          .response({ message: "Team not found with that invite code." })
-          .code(404);
-      }
-
-      // Fetch the tournament details
-      const tournament = await Tournament.findOne({
-        where: { id: team.tournament_id },
-      });
-      const teamMembersCount = await Users_Team.count({
-        where: { team_id: team.id },
-      });
-
-      const userAlreadyInTeam = await Users_Team.findOne({
-        where: { users_id: users_id, team_id: team.id },
-      });
-
-      if (userAlreadyInTeam) {
-        return h
-          .response({
-            message: "User is already in a team for this tournament.",
-          })
-          .code(400);
-      }
-
-      // Check if the team has reached the limit
-      if (teamMembersCount >= tournament.teamSizeLimit) {
-        return h
-          .response({
-            message: `Team is full. Limit is ${tournament.teamSizeLimit} members.`,
-          })
-          .code(400);
-      }
-
-      // Add the user to the team
-      await Users_Team.create({
-        users_id,
-        team_id: team.id,
-      });
-
-      // Initialize the user's individual score in TournamentPoints
-      await TournamentPoints.create({
-        users_id,
-        tournament_id: team.tournament_id,
-        points: 0,
-      });
-
-      return h
-        .response({
-          message: "Successfully joined the team",
-          team,
-        })
-        .code(200);
-    } catch (error) {
-      console.error("Error joining team:", error.message);
-      return h
-        .response({
-          message: "Failed to join team",
-          error: error.message,
-        })
         .code(500);
     }
   },
@@ -676,21 +456,7 @@ const teamController = {
           .code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-      // console.log(decoded);
-
-      // Retrieve user
-      const user = await User.findOne({
-        where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
@@ -771,19 +537,7 @@ const teamController = {
           .code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
@@ -873,19 +627,7 @@ const teamController = {
           .code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
@@ -976,27 +718,13 @@ const teamController = {
           .code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-
-      // Find the user initiating the leave
-      const user = await User.findOne({
-        where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
       }
 
       const userId = user.user_id;
-      // const userId = "c08006fd-cb36-425c-8bc0-56d5e3a2b5d7";
       const teamId = req.params.team_id;
 
       // Retrieve tournament_id using team_id
@@ -1061,5 +789,22 @@ const teamController = {
     }
   },
 };
+
+async function authenticateUser(token) {
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+  } catch (err) {
+    return null;
+  }
+
+  const user = await User.findOne({
+    where: {
+      itaccount: decoded.email,
+    },
+  });
+
+  return user;
+}
 
 module.exports = teamController;

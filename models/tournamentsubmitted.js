@@ -15,6 +15,7 @@ module.exports = (sequelize) => {
           key: "user_id",
         },
         unique: "user_question_tournament_unique",
+        primaryKey: true,
       },
       tournament_id: {
         type: DataTypes.INTEGER,
@@ -24,6 +25,7 @@ module.exports = (sequelize) => {
           key: "id",
         },
         unique: "user_question_tournament_unique",
+        primaryKey: true,
       },
       question_tournament_id: {
         type: DataTypes.INTEGER,
@@ -33,6 +35,7 @@ module.exports = (sequelize) => {
           key: "id",
         },
         unique: "user_question_tournament_unique",
+        primaryKey: true,
       },
       team_id: {
         type: DataTypes.INTEGER,
@@ -42,6 +45,7 @@ module.exports = (sequelize) => {
           key: "id",
         },
         unique: "user_question_tournament_unique",
+        primaryKey: true,
       },
     },
     {

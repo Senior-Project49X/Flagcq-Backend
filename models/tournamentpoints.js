@@ -28,6 +28,14 @@ module.exports = (sequelize) => {
           key: "id",
         },
       },
+      team_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+          model: "Team", // อ้างอิงไปที่ตาราง Team
+          key: "id",
+        },
+      },
       points: {
         type: DataTypes.INTEGER,
         defaultValue: 0, // Default points set to 0
@@ -47,6 +55,9 @@ module.exports = (sequelize) => {
     TournamentPoints.belongsTo(models.Tournament, {
       foreignKey: "tournament_id",
       as: "tournament",
+    });
+    TournamentPoints.belongsTo(models.Team, {
+      foreignKey: "team_id",
     });
   };
 

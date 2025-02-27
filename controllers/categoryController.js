@@ -13,18 +13,7 @@ const categoryController = {
         return h.response({ error: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ error: "User not found" }).code(404);
@@ -46,24 +35,13 @@ const categoryController = {
         return h.response({ error: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
+      const user = await authenticateUser(token);
       if (!user) {
         return h.response({ error: "User not found" }).code(404);
       }
 
       if (user.role !== "Admin") {
-        return h.response({ error: "Unauthorized" }).code(401);
+        return h.response({ error: "Forbidden: Only admins" }).code(403);
       }
 
       if (!name || name.trim() === "") {
@@ -88,24 +66,13 @@ const categoryController = {
         return h.response({ error: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
+      const user = await authenticateUser(token);
       if (!user) {
         return h.response({ error: "User not found" }).code(404);
       }
 
       if (user.role !== "Admin") {
-        return h.response({ error: "Unauthorized" }).code(401);
+        return h.response({ error: "Forbidden: Only admins" }).code(403);
       }
 
       const category = await Category.findByPk(categoryId);
@@ -118,44 +85,7 @@ const categoryController = {
       return h.response({ error: "Unable to delete category" }).code(500);
     }
   },
-  getCategoriesById: async (request, h) => {
-    try {
-      const categoryId = parseInt(request.params.id, 10);
-      if (isNaN(categoryId) || categoryId <= 0) {
-        return h.response({ error: "Invalid category ID" }).code(400);
-      }
 
-      const token = request.state["cmu-oauth-token"];
-      if (!token) {
-        return h.response({ error: "Unauthorized" }).code(401);
-      }
-
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
-
-      if (!user) {
-        return h.response({ error: "User not found" }).code(404);
-      }
-
-      const category = await Category.findByPk(categoryId);
-      if (category) {
-        return h.response(category).code(200);
-      }
-      return h.response({ error: "Category not found" }).code(404);
-    } catch (error) {
-      return h.response({ error: "Unable to retrieve category" }).code(500);
-    }
-  },
   updateCategory: async (request, h) => {
     try {
       const categoryId = parseInt(request.params.id, 10);
@@ -173,25 +103,14 @@ const categoryController = {
         return h.response({ error: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ error: "User not found" }).code(404);
       }
 
       if (user.role !== "Admin") {
-        return h.response({ error: "Unauthorized" }).code(401);
+        return h.response({ error: "Forbidden: Only admins" }).code(403);
       }
 
       const category = await Category.findByPk(categoryId);
@@ -208,5 +127,22 @@ const categoryController = {
     }
   },
 };
+
+async function authenticateUser(token) {
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+  } catch (err) {
+    return null;
+  }
+
+  const user = await User.findOne({
+    where: {
+      itaccount: decoded.email,
+    },
+  });
+
+  return user;
+}
 
 module.exports = categoryController;

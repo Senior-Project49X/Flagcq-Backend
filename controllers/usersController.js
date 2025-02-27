@@ -109,18 +109,10 @@ const usersController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
+      const user = await authenticateUser(token);
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
       }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
 
       const point = await Point.findOne({
         where: { users_id: user.user_id },
@@ -143,12 +135,12 @@ const usersController = {
 
       return h
         .response({
-          first_name: decoded.first_name,
-          last_name: decoded.last_name,
-          AccType: decoded.AccType,
-          faculty: decoded.faculty,
-          student_id: decoded.student_id,
-          email: decoded.email,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          AccType: user.AccType,
+          faculty: user.faculty,
+          student_id: user.student_id,
+          email: user.email,
           points: point.points,
           rank: rank,
         })
@@ -171,18 +163,7 @@ const usersController = {
         return h.response({ message: "Missing token" }).code(400);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
@@ -207,24 +188,14 @@ const usersController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid or expired token" }).code(401);
-      }
-
-      let user = await User.findOne({
-        where: { itaccount: decoded.email },
-        transaction,
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
       }
 
       if (user.role !== "Admin") {
-        return h.response({ message: "Unauthorized" }).code(401);
+        return h.response({ message: "Forbidden: Only admins" }).code(403);
       }
 
       const { users, role } = request.payload;
@@ -315,6 +286,23 @@ async function getUserInfo(accessToken) {
     console.error(err);
     return null;
   }
+}
+
+async function authenticateUser(token) {
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+  } catch (err) {
+    return null;
+  }
+
+  const user = await User.findOne({
+    where: {
+      itaccount: decoded.email,
+    },
+  });
+
+  return user;
 }
 
 module.exports = usersController;

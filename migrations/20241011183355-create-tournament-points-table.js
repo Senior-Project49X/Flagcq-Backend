@@ -17,6 +17,11 @@ module.exports = {
         type: Sequelize.INTEGER,
         allowNull: false,
       },
+      team_id: {
+        // 👈 เพิ่ม team_id ตรงนี้
+        type: Sequelize.INTEGER,
+        allowNull: false,
+      },
       points: {
         type: Sequelize.INTEGER,
         allowNull: false,
@@ -50,6 +55,18 @@ module.exports = {
       name: "FK_TournamentPoints_tournament_id",
       references: {
         table: "Tournament",
+        field: "id",
+      },
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
+    });
+
+    await queryInterface.addConstraint("TournamentPoints", {
+      fields: ["team_id"], // 👈 เพิ่ม FK ของ team_id
+      type: "foreign key",
+      name: "FK_TournamentPoints_team_id",
+      references: {
+        table: "Teams",
         field: "id",
       },
       onDelete: "CASCADE",

@@ -20,11 +20,6 @@ const categoryRoute = [
     handler: categoryController.deleteCategory,
   },
   {
-    method: "GET",
-    path: "/api/categories/{id}",
-    handler: categoryController.getCategoriesById,
-  },
-  {
     method: "PUT",
     path: "/api/categories/{id}",
     handler: categoryController.updateCategory,

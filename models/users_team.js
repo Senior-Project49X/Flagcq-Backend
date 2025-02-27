@@ -6,12 +6,6 @@ module.exports = (sequelize) => {
   const Users_Team = sequelize.define(
     "Users_Team",
     {
-      id: {
-        type: DataTypes.INTEGER,
-        primaryKey: true,
-        autoIncrement: true,
-        allowNull: false,
-      },
       users_id: {
         type: DataTypes.UUID,
         allowNull: false,
@@ -43,13 +37,12 @@ module.exports = (sequelize) => {
       foreignKey: "users_id",
       as: "user", // Alias for user details
     });
-  
+
     Users_Team.belongsTo(models.Team, {
       foreignKey: "team_id",
       as: "team", // Alias for the team details
     });
   };
-  
 
   return Users_Team;
 };

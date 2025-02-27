@@ -131,7 +131,7 @@ const questionController = {
       }
 
       if (user.role !== "Admin") {
-        return h.response({ message: "Unauthorized" }).code(401);
+        return h.response({ message: "Forbidden: Only admins" }).code(403);
       }
 
       const sanitizedTitle = xss(trimmedTitle);
@@ -295,7 +295,7 @@ const questionController = {
       }
 
       if (user.role !== "Admin") {
-        return h.response({ message: "Unauthorized" }).code(401);
+        return h.response({ message: "Forbidden: Only admins" }).code(403);
       }
 
       const tournament = await Tournaments.findByPk(parsedTournamentId, {
@@ -382,7 +382,7 @@ const questionController = {
       }
 
       if (user.role !== "Admin") {
-        return h.response({ message: "Unauthorized" }).code(401);
+        return h.response({ message: "Forbidden: Only admins" }).code(403);
       }
 
       const tournament = await Tournaments.findByPk(parsedTournamentId, {
@@ -805,7 +805,6 @@ const questionController = {
                   "users_id",
                   "tournament_id",
                 ],
-                raw: true,
               });
 
               TournamentSovledIds = TournamentSovled.map(
@@ -943,6 +942,7 @@ const questionController = {
         })
         .code(200);
     } catch (error) {
+      console.log(error);
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -972,7 +972,7 @@ const questionController = {
       }
 
       if (user.role !== "Admin") {
-        return h.response({ message: "Unauthorized" }).code(401);
+        return h.response({ message: "Forbidden: Only admins" }).code(403);
       }
 
       const parsedPage = parseInt(page, 10);
@@ -1315,7 +1315,7 @@ const questionController = {
       }
 
       if (user.role !== "Admin") {
-        return h.response({ message: "Unauthorized" }).code(401);
+        return h.response({ message: "Forbidden: Only admins" }).code(403);
       }
 
       const {
@@ -1564,7 +1564,7 @@ const questionController = {
       }
 
       if (user.role !== "Admin") {
-        return h.response({ message: "Unauthorized" }).code(401);
+        return h.response({ message: "Forbidden: Only admins" }).code(403);
       }
 
       const question = await Question.findByPk(questionId, { transaction });
@@ -1929,7 +1929,11 @@ const questionController = {
       }
 
       let point = await TournamentPoints.findOne({
-        where: { users_id: UserTeam.users_id, tournament_id: tournamentId },
+        where: {
+          users_id: UserTeam.users_id,
+          tournament_id: tournamentId,
+          team_id: UserTeam.team_id,
+        },
         transaction,
       });
 
@@ -1991,6 +1995,7 @@ const questionController = {
       }
     } catch (err) {
       await transaction.rollback();
+      console.log(err);
       return h.response({ message: "Internal Server Error" }).code(500);
     }
   },

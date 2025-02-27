@@ -1,10 +1,8 @@
 const db = require("../models");
 const { Team, Users_Team, TeamScores, User, TournamentPoints, Tournament } = db;
-const { Op, where } = require("sequelize");
+const { Op } = require("sequelize");
 const jwt = require("jsonwebtoken");
 const moment = require("moment-timezone");
-const { get } = require("http");
-const { v4: uuidv4 } = require("uuid"); // For generating unique codes
 
 const tournamentController = {
   generatePrivateCode: () => {
@@ -25,21 +23,14 @@ const tournamentController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-
-      let user = await User.findOne({
-        where: { itaccount: decoded.email },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
       }
 
       if (user.role !== "Admin") {
-        return h.response({ message: "Unauthorized" }).code(401);
+        return h.response({ message: "Forbidden: Only admins" }).code(403);
       }
 
       const {
@@ -180,23 +171,7 @@ const tournamentController = {
           .code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h
-          .response({ message: "Unauthorized: Invalid token." })
-          .code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
@@ -301,23 +276,7 @@ const tournamentController = {
           .code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h
-          .response({ message: "Unauthorized: Invalid token." })
-          .code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
@@ -339,7 +298,7 @@ const tournamentController = {
           include: {
             model: Users_Team,
             as: "usersTeams",
-            attributes: [],
+            attributes: ["team_id"],
             where: { users_id: userId },
             required: false,
           },
@@ -456,24 +415,7 @@ const tournamentController = {
           .code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h
-          .response({ message: "Unauthorized: Invalid token." })
-          .code(401);
-      }
-
-      // Retrieve user
-      const user = await User.findOne({
-        where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
@@ -497,13 +439,13 @@ const tournamentController = {
           include: {
             model: Users_Team,
             where: { users_id: userId },
-            attributes: [],
+            attributes: ["team_id"],
             as: "usersTeams",
             required: true,
           },
           required: true,
         },
-        raw: true,
+        raw: true, //maybe the problem is here
       });
 
       const tournamentIds = joinedTournamentIds.map((t) => t.id);
@@ -553,7 +495,7 @@ const tournamentController = {
           createdAt: tournament.createdAt,
           updatedAt: tournament.updatedAt,
           hasJoined: !!userTeam,
-          teamId: userTeam ? userTeam.team_id : null,
+          teamId: userTeam ? userTeam.id : null,
           teamCount: tournament.Teams ? tournament.Teams.length : 0, // Now this will include all teams
         };
       });
@@ -581,30 +523,6 @@ const tournamentController = {
     }
   },
 
-  getAvailableTournaments: async (req, h) => {
-    try {
-      const now = new Date();
-
-      const tournaments = await Tournament.findAll({
-        where: {
-          enroll_endDate: {
-            [Op.gt]: now, // Check if enroll_endDate is greater than current time
-          },
-        },
-      });
-
-      return h.response(tournaments).code(200);
-    } catch (error) {
-      console.error("Error fetching tournaments:", error);
-      return h
-        .response({
-          message: "Failed to get tournaments",
-          error: error.message,
-        })
-        .code(500);
-    }
-  },
-
   getTournamentDetails: async (req, h) => {
     try {
       const token = req.state["cmu-oauth-token"];
@@ -614,20 +532,7 @@ const tournamentController = {
           .code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-
-      // Retrieve user
-      const user = await User.findOne({
-        where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
@@ -680,7 +585,7 @@ const tournamentController = {
       // Find user's team_id in the specified tournament
       const userTeam = await Users_Team.findOne({
         where: { users_id: userId },
-        attributes: [],
+        attributes: ["team_id"],
         include: {
           model: Team,
           where: { tournament_id: id },
@@ -696,10 +601,8 @@ const tournamentController = {
           })
           .code(404);
       }
-      // console.log(userTeam);
 
       const userTeamId = userTeam.team_id;
-      // console.log(userTeamId);
 
       const rankedLeaderboard = teamScores.map((entry, index) => ({
         team_id: entry.team_id,
@@ -707,7 +610,6 @@ const tournamentController = {
         total_points: entry.total_points,
         rank: index + 1,
       }));
-      // console.log(rankedLeaderboard);
 
       const userTeamRank = rankedLeaderboard.find(
         (rank) => rank.team_id === userTeamId
@@ -738,6 +640,24 @@ const tournamentController = {
 
   deleteTournamentById: async (req, h) => {
     try {
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const user = await authenticateUser(token);
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+
+      if (user.role !== "Admin") {
+        return h
+          .response({
+            message: "Forbidden: Only admins can delete tournaments.",
+          })
+          .code(403);
+      }
+
       const id = req.params.tournament_id;
 
       const tournament = await Tournament.findByPk(id);
@@ -777,20 +697,7 @@ const tournamentController = {
           .code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-
-      // Retrieve user
-      const user = await User.findOne({
-        where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
@@ -834,7 +741,7 @@ const tournamentController = {
           {
             model: Users_Team,
             as: "usersTeams",
-            attributes: [],
+            attributes: ["team_id", "users_id"],
             include: [
               {
                 model: User,
@@ -847,11 +754,11 @@ const tournamentController = {
                     where: { tournament_id },
                     attributes: ["points"],
                     required: false,
+                    separate: true, // ✅ ดึง TournamentPoints แยกกันชัดเจน
                   },
                 ],
               },
             ],
-            raw: true,
           },
         ],
       });
@@ -862,11 +769,11 @@ const tournamentController = {
         const totalPoints = team.TeamScores[0]?.total_points || 0;
 
         const members = team.usersTeams.map((member, index) => ({
-          userId: member.user.user_id,
-          isLeader: index === 0,
+          // userId: member.user.user_id,
+          // isLeader: index === 0,
           firstName: member.user.first_name,
           lastName: member.user.last_name,
-          individualScore: member.user.tournamentPoints[0]?.points || 0,
+          individualScore: member.user.tournamentPoints?.[0]?.points || 0,
         }));
 
         return {
@@ -902,20 +809,7 @@ const tournamentController = {
           .code(401);
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-
-      // Retrieve user
-      const user = await User.findOne({
-        where: {
-          [Op.or]: [
-            { student_id: decoded.student_id },
-            { itaccount: decoded.email },
-          ],
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
@@ -931,7 +825,7 @@ const tournamentController = {
       // First find the user's team
       const userTeam = await Users_Team.findOne({
         where: { users_id },
-        attributes: [],
+        attributes: ["team_id"],
         include: [
           {
             model: Team,
@@ -990,7 +884,7 @@ const tournamentController = {
           {
             model: Users_Team,
             as: "usersTeams",
-            attributes: ["user_id", "team_id"],
+            attributes: ["users_id", "team_id"],
             include: [
               {
                 model: User,
@@ -1044,49 +938,6 @@ const tournamentController = {
     }
   },
 
-  getAllTournamentList: async (req, h) => {
-    try {
-      const token = req.state["cmu-oauth-token"];
-      if (!token) {
-        return h.response({ message: "Unauthorized " }).code(401);
-      }
-
-      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      if (!decoded) {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
-
-      if (!user) {
-        return h.response({ message: "User not found." }).code(404);
-      }
-
-      if (user.role !== "Admin") {
-        return h.response({ message: "Unauthorized" }).code(401);
-      }
-
-      const tournaments = await Tournament.findAll({
-        attributes: ["id", "name", "event_endDate"],
-        order: [["id", "DESC"]],
-      });
-
-      return h.response(tournaments).code(200);
-    } catch (error) {
-      console.error("Error fetching tournaments:", error);
-      return h
-        .response({
-          message: "Failed to get tournaments",
-          error: error.message,
-        })
-        .code(500);
-    }
-  },
-
   getTournamentById: async (req, h) => {
     try {
       const parsedId = parseInt(req.params.id, 10);
@@ -1099,21 +950,18 @@ const tournamentController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let decoded;
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-      } catch (err) {
-        return h.response({ message: "Invalid token" }).code(401);
-      }
-
-      const user = await User.findOne({
-        where: {
-          itaccount: decoded.email,
-        },
-      });
+      const user = await authenticateUser(token);
 
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
+      }
+
+      if (user.role !== "Admin") {
+        return h
+          .response({
+            message: "Forbidden: Only admins can edit tournaments.",
+          })
+          .code(403);
       }
 
       const tournament = await Tournament.findByPk(parsedId, {
@@ -1135,5 +983,22 @@ const tournamentController = {
     }
   },
 };
+
+async function authenticateUser(token) {
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+  } catch (err) {
+    return null;
+  }
+
+  const user = await User.findOne({
+    where: {
+      itaccount: decoded.email,
+    },
+  });
+
+  return user;
+}
 
 module.exports = tournamentController;
