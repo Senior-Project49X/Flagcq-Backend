@@ -3,8 +3,7 @@
 const db = require("../models");
 const User = db.User;
 const Point = db.Point;
-const TournamentPoints = db.TournamentPoints; // Assuming this model exists for storing tournament-specific points
-const TeamScores = db.TeamScores; // Assuming the TeamScores model exists
+const jwt = require("jsonwebtoken");
 
 const lbController = {
   // Leaderboard for practice mode
@@ -16,6 +15,7 @@ const lbController = {
       }
 
       const user = await authenticateUser(token);
+
       if (!user) {
         return h.response({ error: "User not found" }).code(404);
       }

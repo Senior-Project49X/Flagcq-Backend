@@ -1,8 +1,6 @@
 const jwt = require("jsonwebtoken");
 const db = require("../models");
 const { Team, Users_Team, TeamScores, User, TournamentPoints, Tournament } = db;
-const axios = require("axios");
-const { Op } = require("sequelize");
 const moment = require("moment-timezone");
 
 const teamController = {

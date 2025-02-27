@@ -656,8 +656,6 @@ const questionController = {
 
       return h.response(responseData).code(200);
     } catch (error) {
-      console.log(error);
-
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -942,7 +940,6 @@ const questionController = {
         })
         .code(200);
     } catch (error) {
-      console.log(error);
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -1539,7 +1536,6 @@ const questionController = {
       return h.response(question).code(200);
     } catch (error) {
       if (transaction) await transaction.rollback();
-      console.log(error);
 
       return h.response({ message: error.message }).code(500);
     }
@@ -1714,7 +1710,6 @@ const questionController = {
       return h.response({ message: "Question has been deleted" }).code(200);
     } catch (error) {
       await transaction.rollback();
-      console.log(error);
 
       return h.response({ message: error.message }).code(500);
     }
@@ -1821,7 +1816,6 @@ const questionController = {
       }
     } catch (err) {
       await transaction.rollback();
-      console.log(err);
 
       return h.response({ message: "Internal Server Error" }).code(500);
     }
@@ -1995,7 +1989,7 @@ const questionController = {
       }
     } catch (err) {
       await transaction.rollback();
-      console.log(err);
+
       return h.response({ message: "Internal Server Error" }).code(500);
     }
   },
