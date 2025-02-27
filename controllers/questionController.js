@@ -656,6 +656,8 @@ const questionController = {
 
       return h.response(responseData).code(200);
     } catch (error) {
+      console.log(error);
+
       return h.response({ message: error.message }).code(500);
     }
   },

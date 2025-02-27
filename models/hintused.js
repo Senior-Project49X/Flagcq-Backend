@@ -14,6 +14,7 @@ module.exports = (sequelize) => {
         onDelete: "CASCADE",
         onUpdate: "CASCADE",
         unique: "unique_hint_used",
+        primaryKey: true,
       },
       user_id: {
         type: DataTypes.INTEGER,
@@ -25,6 +26,7 @@ module.exports = (sequelize) => {
         onDelete: "CASCADE",
         onUpdate: "CASCADE",
         unique: "unique_hint_used",
+        primaryKey: true,
       },
       team_id: {
         type: DataTypes.INTEGER,
@@ -35,6 +37,7 @@ module.exports = (sequelize) => {
         },
         onDelete: "CASCADE",
         onUpdate: "CASCADE",
+        primaryKey: true,
       },
       createdAt: {
         type: DataTypes.DATE,
