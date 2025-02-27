@@ -37,7 +37,6 @@ module.exports = (sequelize) => {
         },
         onDelete: "CASCADE",
         onUpdate: "CASCADE",
-        primaryKey: true,
       },
       createdAt: {
         type: DataTypes.DATE,
