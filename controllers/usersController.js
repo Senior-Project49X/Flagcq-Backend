@@ -79,7 +79,7 @@ const usersController = {
         isHttpOnly: true,
         path: "/",
         samesite: "Lax",
-        domain: "localhost",
+        domain: process.env.DOMAIN,
       });
 
       return h.response({ message: "Login successful" }).code(200);
