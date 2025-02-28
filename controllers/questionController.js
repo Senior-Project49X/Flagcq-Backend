@@ -1076,6 +1076,14 @@ const questionController = {
                           ),
                           "SolvedCount",
                         ],
+                        [
+                          sequelize.literal(`(
+                            SELECT CAST(COUNT(*) AS INTEGER) 
+                            FROM public."HintUsed" AS HU 
+                            WHERE HU.question_id = "Question".id
+                          )`),
+                          "HintUsedCount",
+                        ],
                       ],
                     },
                     include: [
@@ -1145,6 +1153,14 @@ const questionController = {
                       )`),
                       "SolvedCount",
                     ],
+                    [
+                      sequelize.literal(`(
+                        SELECT CAST(COUNT(*) AS INTEGER) 
+                        FROM public."HintUsed" AS HU 
+                        WHERE HU.question_id = "Question".id
+                      )`),
+                      "HintUsedCount",
+                    ],
                   ],
                 },
                 include: [
@@ -1170,6 +1186,9 @@ const questionController = {
                 mode: "Tournament",
                 is_selected: questionIds.includes(q.id),
                 submitCount: q.dataValues.SolvedCount || 0,
+                canEdit:
+                  q.dataValues.SolvedCount === 0 &&
+                  q.dataValues.HintUsedCount === 0,
               };
             });
 
@@ -1233,6 +1252,14 @@ const questionController = {
               )`),
               "SolvedCount",
             ],
+            [
+              sequelize.literal(`(
+                SELECT CAST(COUNT(*) AS INTEGER) 
+                FROM public."HintUsed" AS HU 
+                WHERE HU.question_id = "Question".id
+              )`),
+              "HintUsedCount",
+            ],
           ],
         },
         include: [
@@ -1265,6 +1292,12 @@ const questionController = {
           submitCount = q.dataValues.submitCount || 0;
           mode = "Practice";
         }
+
+        const isCanEdit =
+          q.dataValues.submitCount === 0 &&
+          q.dataValues.submitCountTournament === 0 &&
+          q.dataValues.HintUsedCount === 0;
+
         return {
           id: q.id,
           title: q.title,
@@ -1274,6 +1307,7 @@ const questionController = {
           mode: mode,
           submitCount: submitCount,
           is_selected: is_selected,
+          canEdit: isCanEdit,
         };
       });
 
@@ -1387,16 +1421,6 @@ const questionController = {
             .response({ message: "Question has been used hint, cannot update" })
             .code(400);
         }
-      }
-
-      if (
-        await QuestionTournament.findOne({
-          where: { questions_id: questionId },
-        })
-      ) {
-        return h
-          .response({ message: "Question in tournament cannot be updated" })
-          .code(400);
       }
 
       if (title) {
