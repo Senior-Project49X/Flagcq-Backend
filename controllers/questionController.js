@@ -942,6 +942,8 @@ const questionController = {
         })
         .code(200);
     } catch (error) {
+      console.log(error);
+
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -2172,10 +2174,10 @@ const questionController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      let tournamentId = null;
+      let teamId = null;
 
       if (tournament_id) {
-        tournamentId = parseInt(tournament_id, 10);
+        const tournamentId = parseInt(tournament_id, 10);
         if (isNaN(tournamentId) || tournamentId <= 0) {
           await transaction.rollback();
           return h.response({ message: "Invalid tournament ID" }).code(400);
@@ -2236,10 +2238,12 @@ const questionController = {
             .code(404);
         }
 
+        teamId = userTeam.team_id;
+
         const existingHintUsedTournament = await HintUsed.findOne({
           where: {
             hint_id: hint.id,
-            team_id: userTeam.team_id,
+            team_id: teamId,
           },
           attributes: ["hint_id", "user_id", "team_id"],
           raw: true,
@@ -2284,6 +2288,22 @@ const questionController = {
           .code(200);
       }
 
+      const existingHintUsed = await HintUsed.findOne({
+        where: {
+          hint_id: hint.id,
+          user_id: user.user_id,
+          team_id: teamId,
+        },
+        attributes: ["hint_id", "user_id", "team_id"],
+        raw: true,
+        transaction,
+      });
+
+      if (existingHintUsed) {
+        await transaction.commit();
+        return h.response({ data: hint.Description }).code(200);
+      }
+
       const point = await Point.findOne({
         where: { users_id: user.user_id },
         transaction,
@@ -2312,6 +2332,7 @@ const questionController = {
         .code(200);
     } catch (error) {
       if (transaction) await transaction.rollback();
+      console.log(error);
       return h.response({ message: error.message }).code(500);
     }
   },
