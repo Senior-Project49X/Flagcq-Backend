@@ -160,7 +160,7 @@ const questionController = {
           return h.response({ message: "File already exists" }).code(409);
         }
         try {
-          file_path = await uploadFile(file);
+          file_path = await uploadFile(file, trimmedTitle);
         } catch (err) {
           return h.response({ message: err.message }).code(500);
         }
@@ -1444,13 +1444,13 @@ const questionController = {
           return h.response({ message: "File already exists" }).code(409);
         }
         try {
-          await deleteFile(question.file_path);
-          file_path = await uploadFile(file);
+          await deleteFile(question.title);
+          file_path = await uploadFile(file, question.title);
         } catch (err) {
           return h.response({ message: err.message }).code(500);
         }
       } else if (isFileEdited === "true" && question.file_path) {
-        await deleteFile(question.file_path);
+        await deleteFile(question.title);
         file_path = null;
       }
 
@@ -2136,6 +2136,7 @@ const questionController = {
         __dirname,
         "..",
         "uploads",
+        question.title,
         question.file_path
       );
 
@@ -2470,8 +2471,8 @@ async function getHashedKey(text) {
   return crypto.createHash("sha256").update(text).digest();
 }
 
-async function uploadFile(file) {
-  if (!file) return null;
+async function uploadFile(file, topic) {
+  if (!file || !topic) return null;
 
   const allowedFileTypes = [
     "application/x-compressed",
@@ -2483,40 +2484,38 @@ async function uploadFile(file) {
     throw new Error("Invalid file type");
   }
 
-  const fileName = file.filename;
-  const filePath = path.join(UPLOAD_DIR, fileName);
+  const topicDir = path.join(UPLOAD_DIR, topic);
+  const filePath = path.join(topicDir, file.filename);
 
   try {
-    await fs.promises.mkdir(UPLOAD_DIR, { recursive: true });
+    await fs.promises.mkdir(topicDir, { recursive: true });
     await fs.promises.writeFile(
       filePath,
       await fs.promises.readFile(file.path)
     );
-    return fileName;
+    return file.filename;
   } catch (err) {
     throw new Error("Failed to upload file");
   }
 }
 
-async function deleteFile(filePath) {
-  if (!filePath) return;
+async function deleteFile(topic) {
+  if (!topic) return;
+
+  const topicDir = path.join(UPLOAD_DIR, topic);
 
   try {
-    const fullPath = path.join(UPLOAD_DIR, filePath);
-    await fs.promises.access(fullPath);
-    await fs.promises.unlink(fullPath);
+    await fs.promises.access(topicDir);
+    const files = await fs.promises.readdir(topicDir);
+    await Promise.all(
+      files.map((file) => fs.promises.unlink(path.join(topicDir, file)))
+    );
+    await fs.promises.rmdir(topicDir);
   } catch (err) {
     if (err.code !== "ENOENT") {
       throw new Error("Failed to delete file");
     }
   }
-}
-
-async function isFileExists(filename) {
-  const existingFile = await Question.findOne({
-    where: { file_path: filename },
-  });
-  return !!existingFile;
 }
 
 function safeParseJSON(jsonString) {
