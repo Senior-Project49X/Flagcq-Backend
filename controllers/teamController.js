@@ -58,8 +58,6 @@ const teamController = {
           .response({ message: "Enrollment period has ended." })
           .code(400);
       }
-      // console.log(currentTime);
-      // console.log(tournament.enroll_endDate);
 
       // Check the mode of the tournament
       if (tournament.mode === "Private") {
@@ -473,7 +471,6 @@ const teamController = {
           attributes: ["id"], // Assuming id is the team_id
         },
       });
-      // console.log(userTeam);
 
       if (!userTeam) {
         return h
@@ -484,7 +481,6 @@ const teamController = {
       }
 
       const teamId = userTeam.team_id;
-      // console.log(teamId);
 
       // Find the leader of the team
       const leaderRecord = await Users_Team.findOne({

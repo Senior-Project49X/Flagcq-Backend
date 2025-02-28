@@ -94,7 +94,12 @@ const usersController = {
         return h.response({ message: "Unauthorized" }).code(401);
       }
 
-      h.unstate("cmu-oauth-token", { path: "/" });
+      h.unstate("cmu-oauth-token", {
+        path: "/",
+        isSecure: true,
+        isHttpOnly: true,
+        domain: process.env.DOMAIN,
+      });
 
       return h.response({ message: "Logout successful" }).code(200);
     } catch (err) {

@@ -656,8 +656,6 @@ const questionController = {
 
       return h.response(responseData).code(200);
     } catch (error) {
-      console.log(error);
-
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -942,8 +940,6 @@ const questionController = {
         })
         .code(200);
     } catch (error) {
-      console.log(error);
-
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -2332,7 +2328,7 @@ const questionController = {
         .code(200);
     } catch (error) {
       if (transaction) await transaction.rollback();
-      console.log(error);
+
       return h.response({ message: error.message }).code(500);
     }
   },
