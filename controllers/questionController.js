@@ -1079,8 +1079,9 @@ const questionController = {
                         [
                           sequelize.literal(`(
                             SELECT CAST(COUNT(*) AS INTEGER) 
-                            FROM public."HintUsed" AS HU 
-                            WHERE HU.question_id = "Question".id
+                            FROM public."Hint_Used" AS HU 
+                            JOIN public."Hints" AS H ON H.id = HU.hint_id
+                            WHERE H.question_id = "Question".id
                           )`),
                           "HintUsedCount",
                         ],
@@ -1156,8 +1157,9 @@ const questionController = {
                     [
                       sequelize.literal(`(
                         SELECT CAST(COUNT(*) AS INTEGER) 
-                        FROM public."HintUsed" AS HU 
-                        WHERE HU.question_id = "Question".id
+                        FROM public."Hint_Used" AS HU 
+                        JOIN public."Hints" AS H ON H.id = HU.hint_id
+                        WHERE H.question_id = "Question".id
                       )`),
                       "HintUsedCount",
                     ],
@@ -1255,8 +1257,9 @@ const questionController = {
             [
               sequelize.literal(`(
                 SELECT CAST(COUNT(*) AS INTEGER) 
-                FROM public."HintUsed" AS HU 
-                WHERE HU.question_id = "Question".id
+                FROM public."Hint_Used" AS HU 
+                JOIN public."Hints" AS H ON H.id = HU.hint_id
+                WHERE H.question_id = "Question".id
               )`),
               "HintUsedCount",
             ],
