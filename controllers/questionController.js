@@ -156,9 +156,6 @@ const questionController = {
 
       let file_path = null;
       if (file?.filename) {
-        if (await isFileExists(file.filename)) {
-          return h.response({ message: "File already exists" }).code(409);
-        }
         try {
           file_path = await uploadFile(file, trimmedTitle);
         } catch (err) {
@@ -1440,9 +1437,6 @@ const questionController = {
 
       let file_path = question.file_path;
       if (file?.filename) {
-        if (await isFileExists(file.filename)) {
-          return h.response({ message: "File already exists" }).code(409);
-        }
         try {
           await deleteFile(question.title);
           file_path = await uploadFile(file, question.title);
