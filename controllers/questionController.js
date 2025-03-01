@@ -1327,6 +1327,8 @@ const questionController = {
     const transaction = await sequelize.transaction();
     let tempFilePath = null;
     let oldFilePath = null;
+    let shouldDeleteFile = false;
+
     try {
       const questionId = parseInt(request.params.id, 10);
       if (isNaN(questionId) || questionId <= 0) {
@@ -1367,6 +1369,7 @@ const questionController = {
       }
 
       oldFilePath = question.title;
+
       const isSubmitted = await Submitted.findOne({
         where: { question_id: questionId },
         transaction,
@@ -1414,6 +1417,7 @@ const questionController = {
           raw: true,
           transaction,
         });
+
         if (existingHintUsed.length > 0) {
           return h
             .response({ message: "Question has been used hint, cannot update" })
@@ -1434,6 +1438,7 @@ const questionController = {
       }
 
       let file_path = question.file_path;
+
       if (file?.filename) {
         try {
           tempFilePath = question.title;
@@ -1442,6 +1447,7 @@ const questionController = {
           return h.response({ message: "File upload failed" }).code(500);
         }
       } else if (isFileEdited === "true" && question.file_path) {
+        shouldDeleteFile = true;
         file_path = null;
       }
 
@@ -1523,7 +1529,7 @@ const questionController = {
       await question.save({ transaction });
       await transaction.commit();
 
-      if (tempFilePath && oldFilePath && tempFilePath !== oldFilePath) {
+      if (shouldDeleteFile && oldFilePath) {
         try {
           await deleteFile(oldFilePath);
         } catch (deleteError) {
@@ -1534,7 +1540,8 @@ const questionController = {
       return h.response(question).code(200);
     } catch (error) {
       if (transaction) await transaction.rollback();
-      if (tempFilePath) {
+
+      if (tempFilePath && tempFilePath !== oldFilePath) {
         try {
           await deleteFile(tempFilePath);
         } catch (deleteError) {
@@ -1544,10 +1551,12 @@ const questionController = {
           );
         }
       }
+
       console.log(error);
       return h.response({ message: error.message }).code(500);
     }
   },
+
   deleteQuestion: async (request, h) => {
     const transaction = await sequelize.transaction();
     try {
