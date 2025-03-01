@@ -37,9 +37,8 @@ module.exports = {
         allowNull: false,
       },
       file_path: {
-        type: Sequelize.STRING(500),
+        type: Sequelize.TEXT,
         allowNull: true,
-        unique: true,
       },
       createdBy: {
         type: Sequelize.STRING(100),

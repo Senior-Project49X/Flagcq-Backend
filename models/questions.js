@@ -37,8 +37,8 @@ module.exports = (sequelize) => {
         allowNull: false,
       },
       file_path: {
-        type: DataTypes.STRING(500),
-        unique: true,
+        type: DataTypes.TEXT,
+        allowNull: true,
       },
       Practice: {
         type: DataTypes.BOOLEAN,

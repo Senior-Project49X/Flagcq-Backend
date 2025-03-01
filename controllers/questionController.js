@@ -246,6 +246,14 @@ const questionController = {
       if (transaction) {
         await transaction.rollback();
       }
+      if (file_path) {
+        try {
+          await deleteFile(file_path);
+        } catch (deleteError) {
+          console.error("⚠️ Failed to delete uploaded file:", deleteError);
+        }
+      }
+      console.log(error);
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -301,6 +309,15 @@ const questionController = {
 
       if (!tournament) {
         return h.response({ message: "Tournament not found" }).code(404);
+      }
+
+      const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
+      if (currentTime > tournament.event_endDate) {
+        return h.response({ message: "Tournament has ended" }).code(400);
+      }
+
+      if (currentTime < tournament.event_startDate) {
+        return h.response({ message: "Tournament has not started" }).code(400);
       }
 
       const questions = await Question.findAll({
@@ -1329,6 +1346,8 @@ const questionController = {
   },
   updateQuestion: async (request, h) => {
     const transaction = await sequelize.transaction();
+    let tempFilePath = null;
+    let oldFilePath = null;
     try {
       const questionId = parseInt(request.params.id, 10);
       if (isNaN(questionId) || questionId <= 0) {
@@ -1368,6 +1387,33 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
+      oldFilePath = question.title;
+      const isSubmitted = await Submitted.findOne({
+        where: { question_id: questionId },
+        transaction,
+      });
+      if (isSubmitted) {
+        return h
+          .response({ message: "Question has been submitted, cannot update" })
+          .code(400);
+      }
+
+      const isTournamentSubmitted = await TournamentSubmitted.findOne({
+        include: [
+          { model: QuestionTournament, where: { questions_id: questionId } },
+        ],
+        raw: true,
+        transaction,
+      });
+
+      if (isTournamentSubmitted) {
+        return h
+          .response({
+            message: "Question has been submitted in tournament, cannot update",
+          })
+          .code(400);
+      }
+
       let ArrayHint = safeParseJSON(Hints);
       if (!ArrayHint) {
         return h.response({ message: "Invalid Hints format" }).code(400);
@@ -1376,33 +1422,6 @@ const questionController = {
       if (isFileEdited !== "true" && isFileEdited !== "false") {
         return h
           .response({ message: "Invalid value for isFileEdited" })
-          .code(400);
-      }
-
-      if (
-        await Submitted.findOne({
-          where: { question_id: questionId },
-          attributes: ["question_id"],
-        })
-      ) {
-        return h
-          .response({ message: "Question has been submitted, cannot update" })
-          .code(400);
-      }
-
-      if (
-        await TournamentSubmitted.findOne({
-          attributes: ["question_tournament_id"],
-          include: [
-            { model: QuestionTournament, where: { questions_id: questionId } },
-          ],
-          raw: true,
-        })
-      ) {
-        return h
-          .response({
-            message: "Question has been submitted in tournament, cannot update",
-          })
           .code(400);
       }
 
@@ -1438,13 +1457,12 @@ const questionController = {
       let file_path = question.file_path;
       if (file?.filename) {
         try {
-          await deleteFile(question.title);
+          tempFilePath = question.title;
           file_path = await uploadFile(file, question.title);
         } catch (err) {
-          return h.response({ message: err.message }).code(500);
+          return h.response({ message: "File upload failed" }).code(500);
         }
       } else if (isFileEdited === "true" && question.file_path) {
-        await deleteFile(question.title);
         file_path = null;
       }
 
@@ -1554,9 +1572,27 @@ const questionController = {
       await question.save({ transaction });
       await transaction.commit();
 
+      if (tempFilePath && oldFilePath && tempFilePath !== oldFilePath) {
+        try {
+          await deleteFile(oldFilePath);
+        } catch (deleteError) {
+          console.error("⚠️ Failed to delete old file:", deleteError);
+        }
+      }
+
       return h.response(question).code(200);
     } catch (error) {
       if (transaction) await transaction.rollback();
+      if (tempFilePath) {
+        try {
+          await deleteFile(tempFilePath);
+        } catch (deleteError) {
+          console.error(
+            "⚠️ Failed to delete temporary uploaded file:",
+            deleteError
+          );
+        }
+      }
 
       return h.response({ message: error.message }).code(500);
     }
@@ -1591,7 +1627,7 @@ const questionController = {
 
       if (question.file_path) {
         try {
-          await deleteFile(question.file_path);
+          await deleteFile(question.title);
         } catch (error) {
           return h
             .response({ message: "Failed to delete associated file" })
@@ -2493,21 +2529,27 @@ async function uploadFile(file, topic) {
   }
 }
 
-async function deleteFile(topic) {
-  if (!topic) return;
+async function deleteFile(title) {
+  if (!title) return;
 
-  const topicDir = path.join(UPLOAD_DIR, topic);
+  const folderPath = path.join(UPLOAD_DIR, title);
 
   try {
-    await fs.promises.access(topicDir);
-    const files = await fs.promises.readdir(topicDir);
-    await Promise.all(
-      files.map((file) => fs.promises.unlink(path.join(topicDir, file)))
-    );
-    await fs.promises.rmdir(topicDir);
+    const stat = await fs.promises.stat(folderPath);
+    if (stat.isDirectory()) {
+      const files = await fs.promises.readdir(folderPath);
+      await Promise.all(
+        files.map((file) => fs.promises.unlink(path.join(folderPath, file)))
+      );
+      await fs.promises.rmdir(folderPath);
+    } else {
+      console.log(`⚠️ ${folderPath} is not a folder`);
+    }
   } catch (err) {
-    if (err.code !== "ENOENT") {
-      throw new Error("Failed to delete file");
+    if (err.code === "ENOENT") {
+      console.log(`⚠️ Folder not found: ${folderPath}`);
+    } else {
+      throw new Error("Failed to delete folder");
     }
   }
 }
