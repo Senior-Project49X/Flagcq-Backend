@@ -203,41 +203,15 @@ const questionController = {
         { transaction }
       );
 
-      if (ArrayHint && ArrayHint.length > 0 && ArrayHint.length <= 3) {
-        const hasInvalidHint = ArrayHint.some(
-          (hint) =>
-            !hint.detail ||
-            hint.penalty === undefined ||
-            hint.penalty === null ||
-            hint.penalty < 0 ||
-            isNaN(hint.penalty)
+      if (ArrayHint !== null) {
+        const sanitizedHintDetail = await validateAndSanitizeHints(
+          ArrayHint,
+          question
         );
 
-        if (hasInvalidHint) {
-          throw new Error(
-            "Invalid hint format. Hint must have detail and penalty"
-          );
+        if (sanitizedHintDetail > 0) {
+          await Hint.bulkCreate(sanitizedHintDetail, { transaction });
         }
-
-        const sanitizedHintDetail = ArrayHint.map((hint) => ({
-          question_id: question.id,
-          Description: xss(hint.detail),
-          point: hint.penalty,
-        }));
-
-        const totalPenalty = sanitizedHintDetail.reduce((sum, curr) => {
-          const point = parseInt(curr.point, 10);
-          if (isNaN(point) || point < 0) {
-            throw new Error(`Invalid penalty format: ${curr.point}`);
-          }
-          return sum + point;
-        }, 0);
-
-        if (totalPenalty > question.point) {
-          throw new Error("Total penalty exceeds point");
-        }
-
-        await Hint.bulkCreate(sanitizedHintDetail, { transaction });
       }
 
       await transaction.commit();
@@ -1511,44 +1485,11 @@ const questionController = {
           transaction,
         });
 
-        if (ArrayHint.length > 0) {
-          if (ArrayHint.length > 3) {
-            throw new Error("Maximum 3 hints allowed");
-          }
-
-          const hasInvalidHint = ArrayHint.some(
-            (hint) =>
-              !hint.detail ||
-              hint.penalty === undefined ||
-              hint.penalty === null ||
-              hint.penalty < 0 ||
-              isNaN(hint.penalty)
-          );
-
-          if (hasInvalidHint) {
-            throw new Error(
-              "Invalid hint format. Hint must have detail and penalty"
-            );
-          }
-
-          const sanitizedHint = ArrayHint.map((hint) => ({
-            question_id: question.id,
-            Description: xss(hint.detail),
-            point: hint.penalty,
-          }));
-
-          const totalPenalty = sanitizedHint.reduce((sum, curr) => {
-            const point = parseInt(curr.point, 10);
-            if (isNaN(point) || point < 0) {
-              throw new Error(`Invalid penalty format: ${curr.point}`);
-            }
-            return sum + point;
-          }, 0);
-
-          if (totalPenalty > question.point) {
-            throw new Error("Total penalty exceeds point");
-          }
-
+        const sanitizedHint = await validateAndSanitizeHints(
+          ArrayHint,
+          question
+        );
+        if (sanitizedHint.length > 0) {
           await Hint.bulkCreate(sanitizedHint, { transaction });
         }
       }
@@ -1593,7 +1534,7 @@ const questionController = {
           );
         }
       }
-
+      console.log(error);
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -2566,4 +2507,50 @@ function isValidDifficulty(difficulty) {
   const validDifficulties = ["Easy", "Medium", "Hard"];
   return validDifficulties.includes(String(difficulty));
 }
+
+async function validateAndSanitizeHints(ArrayHint, question) {
+  if (!ArrayHint || ArrayHint.length === 0) return [];
+
+  if (ArrayHint.length > 3) {
+    throw new Error("Maximum 3 hints allowed.");
+  }
+
+  const hasInvalidHint = ArrayHint.some(
+    (hint) =>
+      !hint.detail ||
+      hint.penalty === undefined ||
+      hint.penalty === null ||
+      hint.penalty < 0 ||
+      isNaN(hint.penalty)
+  );
+
+  if (hasInvalidHint) {
+    throw new Error("Invalid hint format. Hint must have detail and penalty.");
+  }
+
+  const descriptions = ArrayHint.map((hint) => hint.detail.trim());
+  const uniqueDescriptions = new Set(descriptions);
+
+  if (descriptions.length !== uniqueDescriptions.size) {
+    throw new Error("Duplicate hint descriptions found in the request.");
+  }
+
+  const sanitizedHints = ArrayHint.map((hint) => ({
+    question_id: question.id,
+    Description: xss(hint.detail.trim()),
+    point: parseInt(hint.penalty, 10),
+  }));
+
+  const totalPenalty = sanitizedHints.reduce(
+    (sum, curr) => sum + curr.point,
+    0
+  );
+
+  if (totalPenalty > question.point) {
+    throw new Error("Total penalty exceeds question points.");
+  }
+
+  return sanitizedHints;
+}
+
 module.exports = questionController;
