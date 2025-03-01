@@ -58,6 +58,8 @@ const UPLOAD_DIR = path.join(__dirname, "..", "uploads");
 const questionController = {
   createQuestion: async (request, h) => {
     const transaction = await sequelize.transaction();
+    let file_path = null;
+    let trimmedTitle = "";
     try {
       const {
         categories_id,
@@ -91,7 +93,7 @@ const questionController = {
         return h.response({ message: "Missing required fields" }).code(400);
       }
 
-      const trimmedTitle = title.trim();
+      trimmedTitle = title.trim();
       const trimmedAnswer = Answer.trim();
       if (trimmedTitle.length < 1) {
         return h.response({ message: "Title cannot be empty" }).code(400);
@@ -154,7 +156,6 @@ const questionController = {
         return h.response({ message: "Category not found" }).code(404);
       }
 
-      let file_path = null;
       if (file?.filename) {
         try {
           file_path = await uploadFile(file, trimmedTitle);
@@ -204,13 +205,17 @@ const questionController = {
       );
 
       if (ArrayHint !== null) {
-        const sanitizedHintDetail = await validateAndSanitizeHints(
-          ArrayHint,
-          question
-        );
+        try {
+          const result = await validateAndSanitizeHints(ArrayHint, question);
+          if (result.error) {
+            throw new Error(result.error);
+          }
 
-        if (sanitizedHintDetail > 0) {
-          await Hint.bulkCreate(sanitizedHintDetail, { transaction });
+          if (result.sanitizedHints.length > 0) {
+            await Hint.bulkCreate(result.sanitizedHints, { transaction });
+          }
+        } catch (error) {
+          throw new Error(`Hint error: ${error.message}`);
         }
       }
 
@@ -222,7 +227,7 @@ const questionController = {
       }
       if (file_path) {
         try {
-          await deleteFile(file_path);
+          await deleteFile(trimmedTitle);
         } catch (deleteError) {
           console.error("⚠️ Failed to delete uploaded file:", deleteError);
         }
@@ -1485,12 +1490,17 @@ const questionController = {
           transaction,
         });
 
-        const sanitizedHint = await validateAndSanitizeHints(
-          ArrayHint,
-          question
-        );
-        if (sanitizedHint.length > 0) {
-          await Hint.bulkCreate(sanitizedHint, { transaction });
+        try {
+          const result = await validateAndSanitizeHints(ArrayHint, question);
+          if (result.error) {
+            throw new Error(result.error);
+          }
+
+          if (result.sanitizedHints.length > 0) {
+            await Hint.bulkCreate(result.sanitizedHints, { transaction });
+          }
+        } catch (error) {
+          throw new Error(`Hint error: ${error.message}`);
         }
       }
 
@@ -2416,16 +2426,12 @@ async function encryptData(text, secretKey) {
 
 async function decryptData(encryptedString, secretKey) {
   const textParts = encryptedString.split(":");
-
   const iv = Buffer.from(textParts.shift(), "hex");
-
   const encryptedText = Buffer.from(textParts.shift(), "hex");
-
   const authTag = Buffer.from(textParts.shift(), "hex");
-
   const key = await getHashedKey(secretKey);
-
   const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+
   decipher.setAuthTag(authTag);
 
   let decrypted;
@@ -2509,10 +2515,12 @@ function isValidDifficulty(difficulty) {
 }
 
 async function validateAndSanitizeHints(ArrayHint, question) {
-  if (!ArrayHint || ArrayHint.length === 0) return [];
+  if (!ArrayHint || !Array.isArray(ArrayHint)) {
+    return { error: "Invalid Hints format" };
+  }
 
   if (ArrayHint.length > 3) {
-    throw new Error("Maximum 3 hints allowed.");
+    return { error: "Maximum 3 hints allowed" };
   }
 
   const hasInvalidHint = ArrayHint.some(
@@ -2525,19 +2533,19 @@ async function validateAndSanitizeHints(ArrayHint, question) {
   );
 
   if (hasInvalidHint) {
-    throw new Error("Invalid hint format. Hint must have detail and penalty.");
+    return { error: "Invalid hint format. Hint must have detail and penalty" };
   }
 
   const descriptions = ArrayHint.map((hint) => hint.detail.trim());
   const uniqueDescriptions = new Set(descriptions);
 
   if (descriptions.length !== uniqueDescriptions.size) {
-    throw new Error("Duplicate hint descriptions found in the request.");
+    return { error: "Duplicate hint descriptions found in the request." };
   }
 
   const sanitizedHints = ArrayHint.map((hint) => ({
     question_id: question.id,
-    Description: xss(hint.detail.trim()),
+    Description: xss(hint.detail),
     point: parseInt(hint.penalty, 10),
   }));
 
@@ -2547,10 +2555,10 @@ async function validateAndSanitizeHints(ArrayHint, question) {
   );
 
   if (totalPenalty > question.point) {
-    throw new Error("Total penalty exceeds question points.");
+    return { error: "Total penalty exceeds point" };
   }
 
-  return sanitizedHints;
+  return { sanitizedHints };
 }
 
 module.exports = questionController;
