@@ -245,21 +245,6 @@ const tournamentController = {
       
       const playerLimit = teamSizeLimit === 1 ? limit : teamSizeLimit * limit;
       const teamLimit = teamSizeLimit === 1 ? limit : limit;
-      
-      // Check if mode changed from public to private
-      const updateData = {
-        name,
-        description,
-        enroll_startDate: enrollStartDateUTC7,
-        enroll_endDate: enrollEndDateUTC7,
-        event_startDate: eventStartDateUTC7,
-        event_endDate: eventEndDateUTC7,
-        mode,
-        teamSizeLimit,
-        playerLimit,
-        teamLimit,
-        joinCode,
-      };
 
       const isUniqueCode = async (code) => {
         const existingCode = await Tournament.findOne({
@@ -277,6 +262,20 @@ const tournamentController = {
         }
       }
       
+      // Check if mode changed from public to private
+      const updateData = {
+        name,
+        description,
+        enroll_startDate: enrollStartDateUTC7,
+        enroll_endDate: enrollEndDateUTC7,
+        event_startDate: eventStartDateUTC7,
+        event_endDate: eventEndDateUTC7,
+        mode,
+        teamSizeLimit,
+        playerLimit,
+        teamLimit,
+      };
+    
       // Generate new private code if changing from public to private
       if (tournament.mode.toLowerCase() === 'public' && mode.toLowerCase() === 'private') {
         updateData.joinCode = joinCode;
