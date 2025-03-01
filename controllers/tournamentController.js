@@ -982,6 +982,40 @@ const tournamentController = {
         .code(500);
     }
   },
+
+  getAllTournamentList: async (req, h) => {
+    try {
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const user = await authenticateUser(token);
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      if (user.role !== "Admin") {
+        return h.response({ message: "Forbidden: Only admins" }).code(403);
+      }
+
+      const tournaments = await Tournament.findAll({
+        attributes: ["id", "name", "event_startDate", "event_endDate"],
+        order: [["id", "DESC"]],
+      });
+
+      return h.response(tournaments).code(200);
+    } catch (error) {
+      console.error("Error fetching tournaments:", error);
+      return h
+        .response({
+          message: "Failed to get tournaments",
+          error: error.message,
+        })
+        .code(500);
+    }
+  },
 };
 
 async function authenticateUser(token) {
