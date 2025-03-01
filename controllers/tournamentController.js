@@ -164,30 +164,25 @@ const tournamentController = {
         limit,
       } = req.payload;
       const token = req.state["cmu-oauth-token"];
-
       if (!token) {
         return h
           .response({ message: "Unauthorized: No token provided." })
           .code(401);
       }
-
       const user = await authenticateUser(token);
-
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
       }
-
       if (user.role !== "Admin") {
         return h
           .response({ message: "Forbidden: Only admins can edit tournaments." })
           .code(403);
       }
-
       const tournament = await Tournament.findByPk(tournament_id);
       if (!tournament) {
         return h.response({ message: "Tournament not found." }).code(404);
       }
-
+      
       // Convert dates to UTC+7
       const enrollStartDateUTC7 = moment
         .tz(enroll_startDate, "Asia/Bangkok")
@@ -205,7 +200,22 @@ const tournamentController = {
         .tz(event_endDate, "Asia/Bangkok")
         .utc()
         .toDate();
-
+      
+      // Check if current time has passed enrollment start date
+      const currentTime = new Date();
+      const enrollmentStarted = currentTime >= tournament.enroll_startDate;
+      
+      // If enrollment has started, prevent changing teamSizeLimit and limit
+      if (enrollmentStarted && 
+          (tournament.teamSizeLimit !== parseInt(teamSizeLimit) || 
+           tournament.teamLimit !== parseInt(limit))) {
+        return h
+          .response({
+            message: "Cannot change team size limit or team limit after enrollment has started",
+          })
+          .code(400);
+      }
+      
       if (enrollStartDateUTC7 >= enrollEndDateUTC7) {
         return h
           .response({
@@ -213,7 +223,6 @@ const tournamentController = {
           })
           .code(400);
       }
-
       if (enrollEndDateUTC7 >= eventEndDateUTC7) {
         return h
           .response({
@@ -221,7 +230,6 @@ const tournamentController = {
           })
           .code(400);
       }
-
       if (eventStartDateUTC7 >= eventEndDateUTC7) {
         return h
           .response({
@@ -229,17 +237,17 @@ const tournamentController = {
           })
           .code(400);
       }
-
       if (!teamSizeLimit || ![1, 2, 3, 4].includes(teamSizeLimit)) {
         return h
           .response({ message: "Team size limit must be 1 to 4" })
           .code(400);
       }
-
+      
       const playerLimit = teamSizeLimit === 1 ? limit : teamSizeLimit * limit;
       const teamLimit = teamSizeLimit === 1 ? limit : limit;
-
-      await tournament.update({
+      
+      // Check if mode changed from public to private
+      const updateData = {
         name,
         description,
         enroll_startDate: enrollStartDateUTC7,
@@ -250,10 +258,37 @@ const tournamentController = {
         teamSizeLimit,
         playerLimit,
         teamLimit,
-      });
+        joinCode,
+      };
 
+      const isUniqueCode = async (code) => {
+        const existingCode = await Tournament.findOne({
+          where: { joinCode: code },
+        });
+        return !existingCode;
+      };
+
+      // Generate join code only for private tournaments
+      let joinCode = null;
+      if (mode.toLowerCase() === "private") {
+        joinCode = tournamentController.generatePrivateCode();
+        while (!(await isUniqueCode(joinCode))) {
+          joinCode = tournamentController.generatePrivateCode();
+        }
+      }
+      
+      // Generate new private code if changing from public to private
+      if (tournament.mode.toLowerCase() === 'public' && mode.toLowerCase() === 'private') {
+        updateData.joinCode = joinCode;
+      }
+      
+      await tournament.update(updateData);
+      
       return h
-        .response({ message: "Tournament updated successfully." })
+        .response({ 
+          message: "Tournament updated successfully.",
+          joinCode: updateData.joinCode || tournament.joinCode
+        })
         .code(200);
     } catch (error) {
       console.error("Error updating tournament:", error);
