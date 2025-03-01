@@ -295,10 +295,6 @@ const questionController = {
         return h.response({ message: "Tournament has ended" }).code(400);
       }
 
-      if (currentTime < tournament.event_startDate) {
-        return h.response({ message: "Tournament has not started" }).code(400);
-      }
-
       const questions = await Question.findAll({
         where: { id: { [Op.in]: question_id } },
         transaction,
