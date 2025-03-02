@@ -59,7 +59,11 @@ const questionController = {
   createQuestion: async (request, h) => {
     let file_path = null;
     let trimmedTitle = "";
+    let transaction;
+
     try {
+      transaction = await sequelize.transaction();
+
       const {
         categories_id,
         title,
@@ -75,49 +79,46 @@ const questionController = {
 
       const ArrayHint = safeParseJSON(Hints);
       if (!ArrayHint) {
-        return h.response({ message: "Invalid Hints format" }).code(400);
+        throw new Error("Invalid Hints format");
       }
 
       const parsedCategoriesId = parseInt(categories_id, 10);
       if (isNaN(parsedCategoriesId) || parsedCategoriesId <= 0) {
-        return h.response({ message: "Invalid categories_id" }).code(400);
+        throw new Error("Invalid categories_id");
       }
 
       const parsedPoint = parseInt(point, 10);
       if (isNaN(parsedPoint) || parsedPoint <= 0) {
-        return h.response({ message: "Invalid point" }).code(400);
+        throw new Error("Invalid point");
       }
 
       if (!title || !Description || !Answer || !difficulty_id) {
-        return h.response({ message: "Missing required fields" }).code(400);
+        throw new Error("Missing required fields");
       }
 
       trimmedTitle = title.trim();
       const trimmedAnswer = Answer.trim();
       if (!trimmedTitle.length) {
-        return h.response({ message: "Title cannot be empty" }).code(400);
+        throw new Error("Title cannot be empty");
       }
-
       if (!trimmedAnswer.length) {
-        return h.response({ message: "Answer cannot be empty" }).code(400);
+        throw new Error("Answer cannot be empty");
       }
 
       const secretKey = process.env.ANSWER_SECRET_KEY;
       if (!secretKey) {
-        return h.response({ message: "Server configuration error" }).code(500);
+        throw new Error("Server configuration error");
       }
 
       let encryptedAnswer;
       try {
         encryptedAnswer = await encryptData(trimmedAnswer, secretKey);
       } catch {
-        return h.response({ message: "Failed to encrypt answer" }).code(500);
+        throw new Error("Failed to encrypt answer");
       }
 
       if (!isValidDifficulty(difficulty_id)) {
-        return h
-          .response({ message: "Invalid difficulty parameter" })
-          .code(400);
+        throw new Error("Invalid difficulty parameter");
       }
 
       const token = request.state["cmu-oauth-token"];
@@ -142,7 +143,7 @@ const questionController = {
       });
 
       if (existingTitle) {
-        return h.response({ message: "Topic already exists" }).code(409);
+        throw new Error("Topic already exists");
       }
 
       const category = await Category.findByPk(parsedCategoriesId, {
@@ -150,14 +151,14 @@ const questionController = {
       });
 
       if (!category) {
-        return h.response({ message: "Category not found" }).code(404);
+        throw new Error("Category not found");
       }
 
       if (file?.filename) {
         try {
           file_path = await uploadFile(file, trimmedTitle);
         } catch (err) {
-          return h.response({ message: err.message }).code(500);
+          throw new Error(err.message);
         }
       }
 
@@ -165,27 +166,28 @@ const questionController = {
       const isTournament = Tournament === "true";
 
       if (Practice && !["true", "false"].includes(Practice)) {
-        return h.response({ message: "Invalid value for Practice" }).code(400);
+        throw new Error("Invalid value for Practice");
       }
 
       if (Tournament && !["true", "false"].includes(Tournament)) {
-        return h
-          .response({ message: "Invalid value for Tournament" })
-          .code(400);
+        throw new Error("Invalid value for Tournament");
       }
 
-      const question = await Question.create({
-        categories_id: category.id,
-        title: sanitizedTitle,
-        Description: sanitizedDescription,
-        Answer: encryptedAnswer,
-        point: parsedPoint,
-        difficulty_id,
-        file_path,
-        Practice: isPractice,
-        Tournament: isTournament,
-        createdBy: `${user.first_name} ${user.last_name}`,
-      });
+      const question = await Question.create(
+        {
+          categories_id: category.id,
+          title: sanitizedTitle,
+          Description: sanitizedDescription,
+          Answer: encryptedAnswer,
+          point: parsedPoint,
+          difficulty_id,
+          file_path,
+          Practice: isPractice,
+          Tournament: isTournament,
+          createdBy: `${user.first_name} ${user.last_name}`,
+        },
+        { transaction }
+      );
 
       if (ArrayHint?.length) {
         try {
@@ -196,15 +198,18 @@ const questionController = {
           if (error) throw new Error(error);
 
           if (sanitizedHints.length) {
-            await Hint.bulkCreate(sanitizedHints);
+            await Hint.bulkCreate(sanitizedHints, { transaction });
           }
         } catch (error) {
           throw new Error(`Hint error: ${error.message}`);
         }
       }
 
+      await transaction.commit();
       return h.response({ message: "Question created successfully" }).code(201);
     } catch (error) {
+      if (transaction) await transaction.rollback();
+
       if (file_path) {
         try {
           await deleteFile(trimmedTitle);
@@ -212,8 +217,11 @@ const questionController = {
           console.error("⚠️ Failed to delete uploaded file:", deleteError);
         }
       }
+
       console.error(error);
       return h.response({ message: error.message }).code(500);
+    } finally {
+      if (transaction) await transaction.cleanup();
     }
   },
 
