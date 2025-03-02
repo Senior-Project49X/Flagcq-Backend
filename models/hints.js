@@ -23,7 +23,7 @@ module.exports = (sequelize) => {
         onDelete: "CASCADE",
       },
       Description: {
-        type: DataTypes.STRING(100),
+        type: DataTypes.TEXT,
         allowNull: false,
       },
       point: {
