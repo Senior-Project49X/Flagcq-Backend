@@ -622,181 +622,288 @@ const questionController = {
       } = request.query;
 
       const token = request.state["cmu-oauth-token"];
-      if (!token) return h.response({ message: "Unauthorized" }).code(401);
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
 
       const user = await authenticateUser(token);
-      if (!user) return h.response({ message: "User not found" }).code(404);
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
 
       const parsedPage = parseInt(page, 10);
-      if (isNaN(parsedPage) || parsedPage <= 0)
+
+      if (isNaN(parsedPage) || parsedPage <= 0) {
         return h.response({ message: "Invalid page parameter" }).code(400);
+      }
 
       const limit = 12;
       const offset = (parsedPage - 1) * limit;
 
+      const validModes = ["Practice", "Tournament"];
       let where = {};
-      let tournamentSolvedIds = [];
+      let question = {};
+      let totalPages = 0;
+      let hasNextPage = false;
+      let mappedData = [];
+      let TournamentSovledIds = [];
 
       if (category) {
         const categoryNames = category.split(",").map((cat) => cat.trim());
+
         const categories = await Category.findAll({
           where: { name: { [Op.in]: categoryNames } },
-          attributes: ["id"],
+          attributes: ["id", "name"],
         });
 
-        if (categories.length === 0)
-          return h.response({ message: "Category not found" }).code(404);
+        const foundCategoryNames = categories.map((cat) => cat.name);
 
-        where.categories_id = { [Op.in]: categories.map((cat) => cat.id) };
+        const notFoundCategories = categoryNames.filter(
+          (cat) => !foundCategoryNames.includes(cat)
+        );
+
+        if (notFoundCategories.length > 0) {
+          return h
+            .response({
+              message: `Categories not found: ${notFoundCategories.join(", ")}`,
+            })
+            .code(404);
+        }
+
+        const categoryIds = categories.map((cat) => cat.id);
+        where.categories_id = { [Op.in]: categoryIds };
       }
-
       if (difficulty) {
-        if (!isValidDifficulty(difficulty))
+        if (!isValidDifficulty(difficulty)) {
           return h
             .response({ message: "Invalid difficulty parameter" })
             .code(400);
+        }
         where.difficulty_id = difficulty;
       }
 
-      if (!["Practice", "Tournament"].includes(mode)) {
+      if (mode) {
+        if (!validModes.includes(mode)) {
+          return h.response({ message: "Invalid mode parameter" }).code(400);
+        } else if (mode === "Practice") {
+          where.Practice = true;
+          where.Tournament = false;
+        } else if (mode === "Tournament") {
+          if (!tournament_id) {
+            return h
+              .response({
+                message: "Missing tournament_id",
+              })
+              .code(400);
+          } else if (tournament_id) {
+            const parsedTournamentId = parseInt(tournament_id, 10);
+            if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
+              return h.response({ message: "Invalid tournament_id" }).code(400);
+            }
+
+            const validTime = await Tournaments.findOne({
+              where: { id: parsedTournamentId },
+            });
+
+            const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
+
+            if (currentTime > validTime.event_endDate) {
+              return h.response({ message: "Tournament has ended" }).code(400);
+            }
+
+            if (currentTime < validTime.event_startDate) {
+              return h
+                .response({ message: "Tournament has not started" })
+                .code(400);
+            }
+
+            let Userteam = null;
+
+            if (user.role !== "Admin") {
+              Userteam = await User_Team.findOne({
+                where: { users_id: user.user_id },
+                include: [
+                  {
+                    model: Team,
+                    as: "team",
+                    attributes: ["id", "tournament_id", "name"],
+                    where: { tournament_id: parsedTournamentId },
+                  },
+                ],
+              });
+              if (!Userteam) {
+                return h
+                  .response({ message: "User not in this tournament" })
+                  .code(404);
+              }
+
+              const TournamentSovled = await TournamentSubmitted.findAll({
+                where: { team_id: Userteam.team_id },
+                include: [
+                  {
+                    model: QuestionTournament,
+                    as: "QuestionTournament",
+                    attributes: ["questions_id"],
+                  },
+                ],
+                attributes: [
+                  "question_tournament_id",
+                  "team_id",
+                  "users_id",
+                  "tournament_id",
+                ],
+              });
+
+              TournamentSovledIds = TournamentSovled.map(
+                (item) => item.QuestionTournament.questions_id
+              );
+            }
+
+            where.Tournament = true;
+            where.Practice = false;
+            question = await QuestionTournament.findAndCountAll({
+              where: { tournament_id: parsedTournamentId },
+              limit: limit,
+              offset: offset,
+              order: await createSorting({ sort, sort_order, mode }),
+              attributes: [
+                "id",
+                "questions_id",
+                [
+                  sequelize.literal(`(
+                    SELECT CAST(COUNT(*) AS INTEGER)
+                    FROM public."TournamentSubmitted" AS TS
+                    JOIN public."QuestionTournaments" AS QT
+                    ON TS.question_tournament_id = QT.id
+                    WHERE QT.questions_id = "QuestionTournament"."questions_id"
+                    AND QT.tournament_id = ${parsedTournamentId}
+                  )`),
+                  "SolvedCount",
+                ],
+              ],
+              include: [
+                {
+                  model: Question,
+                  as: "Question",
+                  where,
+                  attributes: {
+                    exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
+                    include: [
+                      [
+                        sequelize.literal(`(
+                          SELECT CAST(COUNT(*) AS INTEGER) 
+                          FROM public."Hint_Used" AS HU 
+                          JOIN public."Hints" AS H ON H.id = HU.hint_id
+                          WHERE H.question_id = "Question".id
+                        )`),
+                        "HintUsedCount",
+                      ],
+                    ],
+                  },
+                  include: [
+                    {
+                      model: Category,
+                      as: "Category",
+                      attributes: ["name"],
+                    },
+                  ],
+                },
+              ],
+              group: [
+                "QuestionTournament.id",
+                "Question.id",
+                "Question->Category.id",
+              ],
+              subQuery: false,
+            });
+
+            mappedData = question.rows.map((qt) => {
+              const q = qt.Question || qt;
+              return {
+                id: q.id,
+                title: q.title,
+                point: q.point,
+                categories_name: q.Category?.name,
+                difficulty_id: q.difficulty_id,
+                solved: TournamentSovledIds.includes(q.id),
+                submitCount: qt.dataValues.SolvedCount || 0,
+              };
+            });
+
+            totalPages = Math.ceil(question.count / limit);
+            hasNextPage = parsedPage < totalPages;
+
+            return h
+              .response({
+                data: mappedData,
+                totalItems: mappedData.length,
+                currentPage: parsedPage,
+                totalPages: totalPages,
+                hasNextPage: hasNextPage,
+              })
+              .code(200);
+          }
+        }
+      } else {
         return h.response({ message: "Invalid mode parameter" }).code(400);
       }
 
-      if (mode === "Practice") {
-        where.Practice = true;
-        where.Tournament = false;
-      } else if (mode === "Tournament") {
-        if (!tournament_id)
-          return h.response({ message: "Missing tournament_id" }).code(400);
-
-        const parsedTournamentId = parseInt(tournament_id, 10);
-        if (isNaN(parsedTournamentId) || parsedTournamentId <= 0)
-          return h.response({ message: "Invalid tournament_id" }).code(400);
-
-        const tournament = await Tournaments.findOne({
-          where: { id: parsedTournamentId },
-        });
-        const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
-
-        if (!tournament)
-          return h.response({ message: "Tournament not found" }).code(404);
-        if (currentTime > tournament.event_endDate)
-          return h.response({ message: "Tournament has ended" }).code(400);
-        if (currentTime < tournament.event_startDate)
-          return h
-            .response({ message: "Tournament has not started" })
-            .code(400);
-
-        let userTeam = null;
-        if (user.role !== "Admin") {
-          userTeam = await User_Team.findOne({
-            where: { users_id: user.user_id },
-            include: [
-              {
-                model: Team,
-                as: "team",
-                attributes: ["id"],
-                where: { tournament_id: parsedTournamentId },
-              },
-            ],
-          });
-
-          if (!userTeam)
-            return h
-              .response({ message: "User not in this tournament" })
-              .code(404);
-
-          const tournamentSolved = await TournamentSubmitted.findAll({
-            where: { team_id: userTeam.team.id },
-            attributes: [],
-            include: [
-              {
-                model: QuestionTournament,
-                as: "QuestionTournament",
-                attributes: ["questions_id"],
-              },
-            ],
-          });
-
-          tournamentSolvedIds = tournamentSolved.map(
-            (item) => item.QuestionTournament.questions_id
-          );
-        }
-
-        where.Tournament = true;
-        where.Practice = false;
-      }
-
-      const questionQuery =
-        mode === "Tournament" ? QuestionTournament : Question;
-      const questionFilter =
-        mode === "Tournament" ? { tournament_id: tournament_id } : where;
-
-      const questionData = await questionQuery.findAndCountAll({
-        where: questionFilter,
-        limit,
-        offset,
+      question = await Question.findAndCountAll({
+        where,
+        limit: limit,
+        offset: offset,
         order: await createSorting({ sort, sort_order, mode }),
         attributes: {
           exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
           include: [
             [
-              sequelize.literal(`
-                (SELECT COUNT(*) FROM ${
-                  mode === "Tournament"
-                    ? `"TournamentSubmitted"`
-                    : `"Submitted"`
-                } 
-                 WHERE ${
-                   mode === "Tournament"
-                     ? `"TournamentSubmitted"."question_tournament_id" = "QuestionTournament"."id"`
-                     : `"Submitted"."question_id" = "Question"."id"`
-                 })
-              `),
+              sequelize.literal(`(
+            SELECT CAST(COUNT(*) AS INTEGER)
+            FROM public."Submitted" AS Submitted 
+            WHERE Submitted.question_id = "Question".id
+            )`),
               "SolvedCount",
             ],
           ],
         },
         include: [
-          { model: Category, as: "Category", attributes: ["name"] },
-          ...(mode === "Tournament"
-            ? [{ model: Question, as: "Question", where }]
-            : []),
+          {
+            model: Category,
+            as: "Category",
+            attributes: ["name"],
+          },
         ],
       });
 
-      let solvedIds = [];
-      if (mode === "Practice") {
-        const solvedQuestions = await Submitted.findAll({
-          where: { users_id: user.user_id },
-          attributes: ["question_id"],
-        });
-        solvedIds = solvedQuestions.map((item) => item.question_id);
-      }
-
-      const mappedData = questionData.rows.map((q) => {
-        const question = mode === "Tournament" ? q.Question : q;
-        return {
-          id: question.id,
-          title: question.title,
-          point: question.point,
-          categories_name: question.Category?.name,
-          difficulty_id: question.difficulty_id,
-          solved:
-            mode === "Tournament"
-              ? tournamentSolvedIds.includes(question.id)
-              : solvedIds.includes(question.id),
-          submitCount: question.dataValues.SolvedCount || 0,
-        };
+      const solvedQuestions = await Submitted.findAll({
+        where: { users_id: user.user_id },
+        attributes: ["question_id"],
       });
+
+      const solvedIds = solvedQuestions.map((item) => item.question_id);
+
+      mappedData = question.rows.map((q) => ({
+        id: q.id,
+        title: q.title,
+        point: q.point,
+        categories_name: q.Category?.name,
+        difficulty_id: q.difficulty_id,
+        author: q.createdBy,
+        solved: solvedIds.includes(q.id),
+        submitCount: q.dataValues.SolvedCount || 0,
+      }));
+
+      totalPages = Math.ceil(question.count / limit);
+      hasNextPage = parsedPage < totalPages;
 
       return h
         .response({
           data: mappedData,
-          totalItems: questionData.count,
+          totalItems: question.count,
           currentPage: parsedPage,
-          totalPages: Math.ceil(questionData.count / limit),
-          hasNextPage: parsedPage < Math.ceil(questionData.count / limit),
+          totalPages: totalPages,
+          hasNextPage: hasNextPage,
         })
         .code(200);
     } catch (error) {
@@ -818,148 +925,368 @@ const questionController = {
       } = request.query;
 
       const token = request.state["cmu-oauth-token"];
-      if (!token) return h.response({ message: "Unauthorized" }).code(401);
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
 
       const user = await authenticateUser(token);
-      if (!user) return h.response({ message: "User not found" }).code(404);
-      if (user.role !== "Admin")
+
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      if (user.role !== "Admin") {
         return h.response({ message: "Forbidden: Only admins" }).code(403);
+      }
 
       const parsedPage = parseInt(page, 10);
-      if (isNaN(parsedPage) || parsedPage <= 0)
+      if (isNaN(parsedPage) || parsedPage <= 0) {
         return h.response({ message: "Invalid page parameter" }).code(400);
+      }
 
       const limit = 12;
       const offset = (parsedPage - 1) * limit;
       const validModes = ["Practice", "Tournament", "Unpublished"];
       let where = {};
+      let question = {};
+      let totalPages = 0;
+      let hasNextPage = false;
+      let mappedData = [];
 
       if (category) {
         const categoryNames = category.split(",").map((cat) => cat.trim());
+
         const categories = await Category.findAll({
           where: { name: { [Op.in]: categoryNames } },
           attributes: ["id", "name"],
         });
 
-        if (categories.length === 0) {
+        const foundCategoryNames = categories.map((cat) => cat.name);
+
+        const notFoundCategories = categoryNames.filter(
+          (cat) => !foundCategoryNames.includes(cat)
+        );
+
+        if (notFoundCategories.length > 0) {
           return h
             .response({
-              message: `Categories not found: ${categoryNames.join(", ")}`,
+              message: `Categories not found: ${notFoundCategories.join(", ")}`,
             })
             .code(404);
         }
 
-        where.categories_id = { [Op.in]: categories.map((cat) => cat.id) };
+        const categoryIds = categories.map((cat) => cat.id);
+        where.categories_id = { [Op.in]: categoryIds };
       }
 
-      if (difficulty && !isValidDifficulty(difficulty)) {
-        return h
-          .response({ message: "Invalid difficulty parameter" })
-          .code(400);
-      } else if (difficulty) {
+      if (difficulty) {
+        if (!isValidDifficulty(difficulty)) {
+          return h
+            .response({ message: "Invalid difficulty parameter" })
+            .code(400);
+        }
         where.difficulty_id = difficulty;
       }
 
-      if (mode && !validModes.includes(mode)) {
-        return h.response({ message: "Invalid mode parameter" }).code(400);
-      }
-
-      let questionQuery;
-
-      switch (mode) {
-        case "Practice":
+      if (mode) {
+        if (!validModes.includes(mode)) {
+          return h.response({ message: "Invalid mode parameter" }).code(400);
+        } else if (mode === "Practice") {
           where.Practice = true;
           where.Tournament = false;
-          questionQuery = Question;
-          break;
+        } else if (mode === "Tournament") {
+          let parsedTournamentId = null;
+          let parsedTournamentSelected = null;
+          let questionIds = [];
 
-        case "Tournament": {
-          if (tournament_id && tournament_selected) {
-            return h.response({ message: "Invalid query parameter" }).code(400);
+          try {
+            if (tournament_id && tournament_selected) {
+              return h
+                .response({ message: "Invalid query parameter" })
+                .code(400);
+            } else if (tournament_id) {
+              parsedTournamentId = parseInt(tournament_id, 10);
+              if (isNaN(parsedTournamentId) || parsedTournamentId <= 0) {
+                return h
+                  .response({ message: "Invalid tournament_id" })
+                  .code(400);
+              }
+
+              question = await QuestionTournament.findAndCountAll({
+                where: { tournament_id: parsedTournamentId },
+                limit: limit,
+                offset: offset,
+                order: await createSorting({ sort, sort_order, mode }),
+                attributes: [
+                  "id",
+                  "questions_id",
+                  [
+                    sequelize.literal(`(
+                      SELECT CAST(COUNT(*) AS INTEGER)
+                      FROM public."TournamentSubmitted" AS TS
+                      JOIN public."QuestionTournaments" AS QT
+                      ON TS.question_tournament_id = QT.id
+                      WHERE QT.questions_id = "QuestionTournament"."questions_id"
+                      AND QT.tournament_id = ${parsedTournamentId}
+                    )`),
+                    "SolvedCount",
+                  ],
+                ],
+                include: [
+                  {
+                    model: Question,
+                    as: "Question",
+                    where,
+                    attributes: {
+                      exclude: [
+                        "Answer",
+                        "createdAt",
+                        "createdBy",
+                        "updatedAt",
+                      ],
+                      include: [
+                        [
+                          sequelize.literal(`(
+                            SELECT CAST(COUNT(*) AS INTEGER) 
+                            FROM public."Hint_Used" AS HU 
+                            JOIN public."Hints" AS H ON H.id = HU.hint_id
+                            WHERE H.question_id = "Question".id
+                          )`),
+                          "HintUsedCount",
+                        ],
+                      ],
+                    },
+                    include: [
+                      {
+                        model: Category,
+                        as: "Category",
+                        attributes: ["name"],
+                      },
+                    ],
+                  },
+                ],
+                group: [
+                  "QuestionTournament.id",
+                  "Question.id",
+                  "Question->Category.id",
+                ],
+                subQuery: false,
+              });
+            } else {
+              if (tournament_selected) {
+                parsedTournamentSelected = parseInt(tournament_selected, 10);
+                if (
+                  isNaN(parsedTournamentSelected) ||
+                  parsedTournamentSelected <= 0
+                ) {
+                  return h
+                    .response({ message: "Invalid tournament_selected" })
+                    .code(400);
+                }
+
+                const existingQuestionIds = await QuestionTournament.findAll({
+                  where: { tournament_id: parsedTournamentSelected },
+                  attributes: [
+                    [
+                      sequelize.fn("DISTINCT", sequelize.col("questions_id")),
+                      "questions_id",
+                    ],
+                  ],
+                  raw: true,
+                });
+
+                questionIds = existingQuestionIds.map(
+                  (item) => item.questions_id
+                );
+              } else {
+                const existingQuestionIds = await QuestionTournament.findAll({
+                  attributes: [
+                    [
+                      sequelize.fn("DISTINCT", sequelize.col("questions_id")),
+                      "questions_id",
+                    ],
+                  ],
+                  raw: true,
+                });
+
+                questionIds = existingQuestionIds.map(
+                  (item) => item.questions_id
+                );
+              }
+
+              question = await Question.findAndCountAll({
+                where: {
+                  ...where,
+                  Tournament: true,
+                  Practice: false,
+                },
+                limit,
+                offset,
+                order: await createSorting({
+                  sort,
+                  sort_order,
+                  mode: "Practice",
+                }),
+                attributes: {
+                  exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
+                  include: [
+                    [
+                      sequelize.literal(`(
+                        SELECT CAST(COUNT(*) AS INTEGER)
+                        FROM public."TournamentSubmitted" AS TS
+                        JOIN public."QuestionTournaments" AS QT 
+                        ON TS.question_tournament_id = QT.id
+                        WHERE QT.questions_id = "Question".id
+                      )`),
+                      "SolvedCount",
+                    ],
+                    [
+                      sequelize.literal(`(
+                        SELECT CAST(COUNT(*) AS INTEGER) 
+                        FROM public."Hint_Used" AS HU 
+                        JOIN public."Hints" AS H ON H.id = HU.hint_id
+                        WHERE H.question_id = "Question".id
+                      )`),
+                      "HintUsedCount",
+                    ],
+                  ],
+                },
+                include: [
+                  {
+                    model: Category,
+                    attributes: ["name"],
+                  },
+                ],
+                group: ["Question.id", "Category.id"],
+                subQuery: false,
+              });
+            }
+
+            mappedData = question.rows.map((qt) => {
+              const q = qt.Question || qt;
+              return {
+                id: q.id,
+                title: q.title,
+                point: q.point,
+                categories_name: q.Category?.name,
+                difficulty_id: q.difficulty_id,
+                author: q.createdBy,
+                mode: "Tournament",
+                is_selected: questionIds.includes(q.id),
+                submitCount: qt.dataValues.SolvedCount || 0,
+                canEdit:
+                  (qt.dataValues.SolvedCount || 0) === 0 &&
+                  (qt.dataValues.HintUsedCount || 0) === 0,
+              };
+            });
+
+            totalPages = Math.ceil(question.count / limit);
+            hasNextPage = parsedPage < totalPages;
+
+            return h
+              .response({
+                data: mappedData,
+                totalItems: mappedData.length,
+                currentPage: parsedPage,
+                totalPages: totalPages,
+                hasNextPage: hasNextPage,
+              })
+              .code(200);
+          } catch (error) {
+            console.log(error);
+            return h.response({ message: error.message }).code(500);
           }
-
-          let parsedTournamentId = tournament_id
-            ? parseInt(tournament_id, 10)
-            : null;
-
-          if (parsedTournamentId && isNaN(parsedTournamentId)) {
-            return h.response({ message: "Invalid tournament_id" }).code(400);
-          }
-
-          if (parsedTournamentId) {
-            questionQuery = QuestionTournament;
-            where.tournament_id = parsedTournamentId;
-          } else {
-            where.Tournament = true;
-            where.Practice = false;
-            questionQuery = Question;
-          }
-          break;
-        }
-
-        case "Unpublished":
+        } else if (mode === "Unpublished") {
           where.Practice = false;
           where.Tournament = false;
-          questionQuery = Question;
-          break;
-
-        default:
-          questionQuery = Question;
+        }
       }
 
-      const questionData = await questionQuery.findAndCountAll({
+      question = await Question.findAndCountAll({
         where,
-        limit,
-        offset,
+        limit: limit,
+        offset: offset,
         order: await createSorting({ sort, sort_order, mode }),
         attributes: {
           exclude: ["Answer", "createdAt", "createdBy", "updatedAt"],
           include: [
             [
               sequelize.literal(`(
-                SELECT CAST(COUNT(*) AS INTEGER) 
-                FROM public."Submitted" AS Submitted 
-                WHERE Submitted.question_id = "Question".id
-              )`),
+          SELECT CAST(COUNT(*) AS INTEGER) 
+          FROM public."Submitted" AS Submitted 
+          WHERE Submitted.question_id = "Question".id
+          )`),
               "submitCount",
             ],
             [
               sequelize.literal(`(
-                SELECT CAST(COUNT(*) AS INTEGER) 
-                FROM public."TournamentSubmitted" AS TS 
-                JOIN public."QuestionTournaments" AS QT 
-                ON TS.question_tournament_id = QT.id 
-                WHERE QT.questions_id = "Question".id
-              )`),
+          SELECT CAST(COUNT(*) AS INTEGER)
+          FROM public."TournamentSubmitted" AS TS
+          JOIN public."QuestionTournaments" AS QT ON TS.question_tournament_id = QT.id
+          WHERE QT.questions_id = "Question".id
+          )`),
               "submitCountTournament",
+            ],
+            [
+              sequelize.literal(`(
+                SELECT CAST(COUNT(*) AS INTEGER)
+                FROM (
+                  SELECT question_id as qid FROM public."Submitted"
+                  UNION ALL
+                  SELECT QT.questions_id 
+                  FROM public."TournamentSubmitted" AS TS
+                  JOIN public."QuestionTournaments" AS QT ON TS.question_tournament_id = QT.id
+                ) AS combined
+                WHERE combined.qid = "Question".id
+              )`),
+              "SolvedCount",
             ],
             [
               sequelize.literal(`(
                 SELECT CAST(COUNT(*) AS INTEGER) 
                 FROM public."Hint_Used" AS HU 
-                JOIN public."Hints" AS H 
-                ON H.id = HU.hint_id 
+                JOIN public."Hints" AS H ON H.id = HU.hint_id
                 WHERE H.question_id = "Question".id
               )`),
               "HintUsedCount",
             ],
           ],
         },
-        include: [{ model: Category, as: "Category", attributes: ["name"] }],
+        include: [
+          {
+            model: Category,
+            as: "Category",
+            attributes: ["name"],
+          },
+        ],
         subQuery: false,
       });
 
-      const mappedData = questionData.rows.map((q) => {
-        let questionMode = "Unpublished";
+      const existingTournament = await QuestionTournament.findAll({
+        attributes: ["questions_id"],
+        distinct: true,
+      });
+
+      const questionIds = existingTournament.map((item) => item.questions_id);
+
+      mappedData = question.rows.map((q) => {
+        let mode = "Unpublished";
         let submitCount = 0;
+        let is_selected = false;
 
         if (q.Tournament) {
           submitCount = q.dataValues.submitCountTournament || 0;
-          questionMode = "Tournament";
+          mode = "Tournament";
+          is_selected = questionIds.includes(q.id);
         } else if (q.Practice) {
           submitCount = q.dataValues.submitCount || 0;
-          questionMode = "Practice";
+          mode = "Practice";
         }
+
+        const isCanEdit =
+          q.dataValues.submitCount === 0 &&
+          q.dataValues.submitCountTournament === 0 &&
+          q.dataValues.HintUsedCount === 0;
 
         return {
           id: q.id,
@@ -967,31 +1294,32 @@ const questionController = {
           point: q.point,
           categories_name: q.Category?.name || null,
           difficulty_id: q.difficulty_id,
-          mode: questionMode,
+          mode: mode,
           submitCount: submitCount,
-          canEdit: submitCount === 0 && q.dataValues.HintUsedCount === 0,
+          is_selected: is_selected,
+          canEdit: isCanEdit,
         };
       });
 
-      const totalPages = Math.ceil(questionData.count / limit);
-      const hasNextPage = parsedPage < totalPages;
+      totalPages = Math.ceil(question.count / limit);
+      hasNextPage = parsedPage < totalPages;
 
       return h
         .response({
           data: mappedData,
-          totalItems: questionData.count,
+          totalItems: question.count,
           currentPage: parsedPage,
           totalPages: totalPages,
           hasNextPage: hasNextPage,
         })
         .code(200);
     } catch (error) {
+      console.log(error);
       return h.response({ message: error.message }).code(500);
     }
   },
   updateQuestion: async (request, h) => {
-    let tempFilePath = null;
-    let oldFilePath = null;
+    let newFilePath = null;
     let shouldDeleteFile = false;
 
     try {
@@ -1032,7 +1360,8 @@ const questionController = {
       if (!question) {
         return h.response({ message: "Question not found" }).code(404);
       }
-      oldFilePath = question.file_path;
+
+      const oldFolderPath = question.title;
 
       const [
         isSubmitted,
@@ -1058,23 +1387,16 @@ const questionController = {
         QuestionTournament.findOne({ where: { questions_id: questionId } }),
       ]);
 
-      if (isSubmitted) {
+      if (isSubmitted || isTournamentSubmitted) {
         return h
           .response({ message: "Question has been submitted, cannot update" })
-          .code(400);
-      }
-      if (isTournamentSubmitted) {
-        return h
-          .response({
-            message: "Question has been submitted in tournament, cannot update",
-          })
           .code(400);
       }
 
       if (existingHint.length > 0) {
         const existingHintUsed = await HintUsed.findAll({
           where: { hint_id: { [Op.in]: existingHint.map((item) => item.id) } },
-          attributes: ["hint_id", "user_id", "team_id"],
+          attributes: ["hint_id"],
           raw: true,
         });
 
@@ -1107,18 +1429,14 @@ const questionController = {
         question.title = xss(trimmedTitle);
       }
 
-      let file_path = question.file_path;
-
       if (file?.filename) {
         try {
-          tempFilePath = question.title;
-          file_path = await uploadFile(file, question.title);
+          newFilePath = await uploadFile(file, question.title);
         } catch (err) {
           return h.response({ message: "File upload failed" }).code(500);
         }
-      } else if (isFileEdited === "true" && question.file_path) {
+      } else if (isFileEdited === "true") {
         shouldDeleteFile = true;
-        file_path = null;
       }
 
       const transaction = await sequelize.transaction();
@@ -1129,9 +1447,7 @@ const questionController = {
 
         if (difficulty_id) {
           if (!isValidDifficulty(difficulty_id)) {
-            return h
-              .response({ message: "Invalid difficulty parameter" })
-              .code(400);
+            throw new Error("Invalid difficulty parameter");
           }
           question.difficulty_id = difficulty_id;
         }
@@ -1149,75 +1465,76 @@ const questionController = {
         if (point) {
           const parsedPoint = parseInt(point, 10);
           if (isNaN(parsedPoint) || parsedPoint <= 0) {
-            return h.response({ message: "Invalid point" }).code(400);
+            throw new Error("Invalid point");
           }
           question.point = parsedPoint;
         }
 
-        if (ArrayHint !== undefined) {
-          await Hint.destroy({
-            where: { question_id: question.id },
-            transaction,
-          });
+        await Hint.destroy({
+          where: { question_id: question.id },
+          transaction,
+        });
 
-          try {
-            const result = await validateAndSanitizeHints(ArrayHint, question);
-            if (result.error) {
-              throw new Error(result.error);
-            }
-
-            if (result.sanitizedHints.length > 0) {
-              await Hint.bulkCreate(result.sanitizedHints, { transaction });
-            }
-          } catch (error) {
-            throw new Error(`Hint error: ${error.message}`);
+        try {
+          const result = await validateAndSanitizeHints(ArrayHint, question);
+          if (result.error) {
+            throw new Error(result.error);
           }
+
+          if (result.sanitizedHints.length > 0) {
+            await Hint.bulkCreate(result.sanitizedHints, { transaction });
+          }
+        } catch (error) {
+          throw new Error(`Hint error: ${error.message}`);
         }
 
-        if (!isInTournament) {
+        if (isInTournament) {
+          if (Practice === "true") {
+            throw new Error(
+              "This question is in a tournament, cannot set to Practice"
+            );
+          }
+        } else {
           question.Practice = Practice === "true";
           question.Tournament = Tournament === "true";
 
           if (question.Practice && question.Tournament) {
-            return h
-              .response({
-                message: "Practice and Tournament cannot both be true",
-              })
-              .code(400);
+            throw new Error("Practice and Tournament cannot both be true");
           }
         }
 
-        question.file_path = file_path;
+        question.file_path = newFilePath || question.file_path;
 
         await question.save({ transaction });
 
         await transaction.commit();
 
-        if (shouldDeleteFile && oldFilePath) {
+        if (shouldDeleteFile) {
           try {
-            await deleteFile(oldFilePath);
+            await deleteFile(oldFolderPath);
           } catch (deleteError) {
-            console.error("⚠️ Failed to delete old file:", deleteError);
+            console.error("⚠️ Failed to delete old folder:", deleteError);
           }
         }
 
         return h.response(question).code(200);
       } catch (error) {
         await transaction.rollback();
+
+        if (newFilePath) {
+          try {
+            await deleteFile(question.title);
+          } catch (deleteError) {
+            console.error(
+              "⚠️ Failed to delete new folder after error:",
+              deleteError
+            );
+          }
+        }
+
         throw error;
       }
     } catch (error) {
-      if (tempFilePath && tempFilePath !== oldFilePath) {
-        try {
-          await deleteFile(tempFilePath);
-        } catch (deleteError) {
-          console.error(
-            "⚠️ Failed to delete temporary uploaded file:",
-            deleteError
-          );
-        }
-      }
-
       console.error(error);
       return h.response({ message: error.message }).code(500);
     }
@@ -1370,8 +1687,6 @@ const questionController = {
         }
 
         if (user.role === "Admin") {
-          point.points += question.point;
-          await point.save({ transaction: t });
           return h.response({ message: "Correct", solve: true }).code(200);
         }
 
@@ -1408,6 +1723,7 @@ const questionController = {
       return h.response({ message: "Internal Server Error" }).code(500);
     }
   },
+
   checkAnswerTournament: async (request, h) => {
     try {
       const { question_id, tournament_id, Answer } = request.payload;
