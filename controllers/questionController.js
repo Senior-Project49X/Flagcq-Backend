@@ -1439,6 +1439,9 @@ const questionController = {
 
       if (file?.filename) {
         try {
+          if (question.file_path) {
+            await deleteFile(question.title);
+          }
           newFilePath = await uploadFile(file, question.title);
         } catch (err) {
           return h.response({ message: "File upload failed" }).code(500);
@@ -2013,64 +2016,71 @@ const questionController = {
       return h.response({ message: error.message }).code(500);
     }
   },
-  UseHint : async (request, h) => {
+  UseHint: async (request, h) => {
     try {
       const { id, tournament_id } = request.query;
       const hintId = parseInt(id, 10);
-  
+
       if (isNaN(hintId) || hintId <= 0) {
         return h.response({ message: "Invalid hint ID" }).code(400);
       }
-  
+
       const token = request.state["cmu-oauth-token"];
       if (!token) {
         return h.response({ message: "Unauthorized" }).code(401);
       }
-  
+
       const user = await authenticateUser(token);
       if (!user) {
         return h.response({ message: "User not found" }).code(404);
       }
-  
+
       const hint = await Hint.findOne({ where: { id: hintId } });
       if (!hint) {
         return h.response({ message: "Hint not found" }).code(404);
       }
-  
+
       if (user.role === "Admin") {
         return h.response({ data: hint.Description }).code(200);
       }
-  
+
       let teamId = null;
       let pointsToUpdate = null;
-  
+
       if (tournament_id) {
         const tournamentId = parseInt(tournament_id, 10);
         if (isNaN(tournamentId) || tournamentId <= 0) {
           return h.response({ message: "Invalid tournament ID" }).code(400);
         }
-  
+
         const tournament = await Tournaments.findByPk(tournamentId);
         if (!tournament) {
           return h.response({ message: "Tournament not found" }).code(404);
         }
-  
+
         const currentTime = moment.tz("Asia/Bangkok").utc().toDate();
         if (currentTime > tournament.event_endDate) {
           return h.response({ message: "Tournament has ended" }).code(400);
         }
         if (currentTime < tournament.event_startDate) {
-          return h.response({ message: "Tournament has not started" }).code(400);
+          return h
+            .response({ message: "Tournament has not started" })
+            .code(400);
         }
-  
+
         const existingTournament = await QuestionTournament.findOne({
-          where: { questions_id: hint.question_id, tournament_id: tournamentId },
+          where: {
+            questions_id: hint.question_id,
+            tournament_id: tournamentId,
+          },
         });
-  
+
         if (!existingTournament) {
-          return h.response({ message: "Hint not available for this tournament" }).code(400);
+          return h
+            .response({ message: "Hint not available for this tournament" })
+            .code(400);
         }
-  
+
         const userTeam = await User_Team.findOne({
           where: { users_id: user.user_id },
           include: [
@@ -2082,21 +2092,23 @@ const questionController = {
             },
           ],
         });
-  
+
         if (!userTeam) {
-          return h.response({ message: "User not in this tournament" }).code(404);
+          return h
+            .response({ message: "User not in this tournament" })
+            .code(404);
         }
-  
+
         teamId = userTeam.team_id;
-  
+
         const existingHintUsedTournament = await HintUsed.findOne({
           where: { hint_id: hint.id, team_id: teamId },
         });
-  
+
         if (existingHintUsedTournament) {
           return h.response({ data: hint.Description }).code(200);
         }
-  
+
         pointsToUpdate = await TournamentPoints.findOne({
           where: { users_id: userTeam.users_id, tournament_id: tournamentId },
         });
@@ -2104,30 +2116,30 @@ const questionController = {
         const existingHintUsed = await HintUsed.findOne({
           where: { hint_id: hint.id, user_id: user.user_id, team_id: null },
         });
-  
+
         if (existingHintUsed) {
           return h.response({ data: hint.Description }).code(200);
         }
-  
+
         pointsToUpdate = await Point.findOne({
           where: { users_id: user.user_id },
         });
       }
-  
+
       if (!pointsToUpdate) {
         return h.response({ message: "Point not found" }).code(404);
       }
-  
+
       if (pointsToUpdate.points < hint.point) {
         return h.response({ message: "Not enough points" }).code(400);
       }
-  
+
       const transaction = await sequelize.transaction();
       try {
         // ลดคะแนนของผู้ใช้
         pointsToUpdate.points -= hint.point;
         await pointsToUpdate.save({ transaction });
-  
+
         // บันทึกว่าใช้ Hint แล้ว
         await HintUsed.create(
           {
@@ -2137,9 +2149,11 @@ const questionController = {
           },
           { transaction }
         );
-  
+
         await transaction.commit();
-        return h.response({ message: "Hint used", data: hint.Description }).code(200);
+        return h
+          .response({ message: "Hint used", data: hint.Description })
+          .code(200);
       } catch (error) {
         await transaction.rollback();
         return h.response({ message: error.message }).code(500);
