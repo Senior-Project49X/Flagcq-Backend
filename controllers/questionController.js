@@ -1445,6 +1445,7 @@ const questionController = {
         }
       } else if (isFileEdited === "true") {
         shouldDeleteFile = true;
+        question.file_path = null;
       }
 
       const transaction = await sequelize.transaction();
