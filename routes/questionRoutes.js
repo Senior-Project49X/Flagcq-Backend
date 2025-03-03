@@ -83,6 +83,11 @@ const questionRoute = [
     path: "/api/questions/tournament/{tournamentId}/question/{questionIds}",
     handler: questionController.deleteQuestionFromTournament,
   },
+  {
+    method: "GET",
+    path: "/api/question/user-list",
+    handler: questionController.getUserSubmitted,
+  },
 ];
 
 module.exports = questionRoute;

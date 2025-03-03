@@ -38,23 +38,30 @@ module.exports = (sequelize) => {
 
   Team.associate = function (models) {
     Team.belongsTo(models.Tournament, {
-      foreignKey: 'tournament_id',
-      onDelete: 'CASCADE',
-      onUpdate: 'CASCADE'
+      foreignKey: "tournament_id",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
     Team.belongsToMany(models.User, {
-      through: models.Users_Team, 
+      through: models.Users_Team,
       foreignKey: "team_id",
       otherKey: "users_id",
       as: "members", // Alias for the users in the team
     });
-    Team.hasMany(models.TeamScores, { foreignKey: "team_id" });
+    Team.hasMany(models.TeamScores, {
+      foreignKey: "team_id",
+      onDelete: "CASCADE",
+    });
     Team.hasMany(models.Users_Team, {
       foreignKey: "team_id",
-      as: "usersTeams",  // Alias to reference this association
+      as: "usersTeams", // Alias to reference this association
+    });
+    Team.hasMany(models.TournamentSubmitted, {
+      foreignKey: "team_id",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
   };
-  
 
   return Team;
 };

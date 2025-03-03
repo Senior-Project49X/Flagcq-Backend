@@ -2136,11 +2136,9 @@ const questionController = {
 
       const transaction = await sequelize.transaction();
       try {
-        // ลดคะแนนของผู้ใช้
         pointsToUpdate.points -= hint.point;
         await pointsToUpdate.save({ transaction });
 
-        // บันทึกว่าใช้ Hint แล้ว
         await HintUsed.create(
           {
             hint_id: hint.id,
@@ -2159,6 +2157,125 @@ const questionController = {
         return h.response({ message: error.message }).code(500);
       }
     } catch (error) {
+      return h.response({ message: error.message }).code(500);
+    }
+  },
+  getUserSubmitted: async (request, h) => {
+    try {
+      const { id, tournament_id, page = 1 } = request.query;
+      const questionId = parseInt(id, 10);
+
+      if (isNaN(questionId) || questionId <= 0) {
+        return h.response({ message: "Invalid question ID" }).code(400);
+      }
+
+      const token = request.state["cmu-oauth-token"];
+      if (!token) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
+      const user = await authenticateUser(token);
+      if (!user) {
+        return h.response({ message: "User not found" }).code(404);
+      }
+
+      const question = await Question.findByPk(questionId);
+      if (!question) {
+        return h.response({ message: "Question not found" }).code(404);
+      }
+
+      if (user.role !== "Admin") {
+        return h
+          .response({
+            message: "Access denied: Only admins can perform this action.",
+          })
+          .code(403);
+      }
+
+      const parsedPage = parseInt(page, 10);
+      if (isNaN(parsedPage) || parsedPage <= 0) {
+        return h.response({ message: "Invalid page number" }).code(400);
+      }
+
+      const limit = 10;
+      const offset = (parsedPage - 1) * limit;
+      let totalPages = 0;
+      let hasNextPage = false;
+
+      if (tournament_id) {
+        const tournamentId = parseInt(tournament_id, 10);
+        if (isNaN(tournamentId) || tournamentId <= 0) {
+          return h.response({ message: "Invalid tournament ID" }).code(400);
+        }
+
+        const tournament = await Tournaments.findByPk(tournamentId);
+        if (!tournament) {
+          return h.response({ message: "Tournament not found" }).code(404);
+        }
+
+        const existingTournament = await QuestionTournament.findOne({
+          where: { questions_id: questionId, tournament_id: tournamentId },
+        });
+
+        if (!existingTournament) {
+          return h
+            .response({ message: "Question not available for this tournament" })
+            .code(400);
+        }
+
+        const userSubmitted = await User.findAndCountAll({
+          attributes: ["first_name", "last_name"],
+          limit: limit,
+          offset: offset,
+          include: [
+            {
+              model: TournamentSubmitted,
+              where: { question_tournament_id: existingTournament.id },
+              attributes: [],
+            },
+          ],
+        });
+
+        totalPages = Math.ceil(userSubmitted.count / limit);
+        hasNextPage = parsedPage < totalPages;
+        return h
+          .response({
+            data: userSubmitted.rows,
+            totalItems: userSubmitted.count,
+            currentPage: parsedPage,
+            totalPages: totalPages,
+            hasNextPage: hasNextPage,
+          })
+          .code(200);
+      }
+
+      const userSubmitted = await User.findAndCountAll({
+        attributes: ["first_name", "last_name"],
+        limit: limit,
+        offset: offset,
+        include: [
+          {
+            model: Submitted,
+            where: { question_id: questionId },
+            attributes: [],
+          },
+        ],
+      });
+
+      totalPages = Math.ceil(userSubmitted.count / limit);
+      hasNextPage = parsedPage < totalPages;
+      return h
+        .response({
+          data: userSubmitted.rows,
+          totalItems: userSubmitted.count,
+          currentPage: parsedPage,
+          totalPages: totalPages,
+          hasNextPage: hasNextPage,
+        })
+        .code(200);
+    } catch (error) {
+      console.log(error);
+
       return h.response({ message: error.message }).code(500);
     }
   },

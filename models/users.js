@@ -61,6 +61,17 @@ module.exports = (sequelize) => {
       otherKey: "team_id",
       as: "teams", // Alias for teams the user belongs to
     });
+
+    User.hasMany(models.Users_Team, {
+      foreignKey: "users_id",
+      as: "usersTeams", // Alias to reference this association
+    });
+
+    User.hasMany(models.TournamentSubmitted, {
+      foreignKey: "users_id",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
+    });
   };
 
   return User;
