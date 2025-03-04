@@ -839,7 +839,7 @@ const questionController = {
               };
             });
 
-            totalPages = Math.ceil(question.count / limit);
+            totalPages = Math.ceil(question.count[0].count / limit);
             hasNextPage = parsedPage < totalPages;
 
             return h
@@ -1188,7 +1188,7 @@ const questionController = {
               };
             });
 
-            totalPages = Math.ceil(question.count / limit);
+            totalPages = Math.ceil(question.count[0].count / limit);
             hasNextPage = parsedPage < totalPages;
 
             return h
@@ -1201,7 +1201,6 @@ const questionController = {
               })
               .code(200);
           } catch (error) {
-            console.log(error);
             return h.response({ message: error.message }).code(500);
           }
         } else if (mode === "Unpublished") {
@@ -1322,7 +1321,6 @@ const questionController = {
         })
         .code(200);
     } catch (error) {
-      console.log(error);
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -2274,8 +2272,6 @@ const questionController = {
         })
         .code(200);
     } catch (error) {
-      console.log(error);
-
       return h.response({ message: error.message }).code(500);
     }
   },
