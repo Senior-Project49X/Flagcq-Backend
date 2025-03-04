@@ -824,7 +824,7 @@ const questionController = {
                 "Question->Category.id",
               ],
               subQuery: false,
-            });
+            });            
 
             mappedData = question.rows.map((qt) => {
               const q = qt.Question || qt;
@@ -839,7 +839,7 @@ const questionController = {
               };
             });
 
-            totalPages = Math.ceil(question.count[0].count / limit);
+            totalPages = Math.ceil(question.count.length / limit);
             hasNextPage = parsedPage < totalPages;
 
             return h
@@ -1170,6 +1170,7 @@ const questionController = {
               });
             }
 
+
             mappedData = question.rows.map((qt) => {
               const q = qt.Question || qt;
               return {
@@ -1188,7 +1189,7 @@ const questionController = {
               };
             });
 
-            totalPages = Math.ceil(question.count[0].count / limit);
+            totalPages = Math.ceil(question.count.length / limit);
             hasNextPage = parsedPage < totalPages;
 
             return h
@@ -2431,7 +2432,7 @@ async function deleteFile(title) {
     }
   } catch (err) {
     if (err.code === "ENOENT") {
-      console.log(`⚠️ Folder not found: ${folderPath}`);
+      console.log(`⚠️ Folder not found`);
     } else {
       throw new Error("Failed to delete folder");
     }
