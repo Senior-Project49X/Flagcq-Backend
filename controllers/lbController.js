@@ -41,7 +41,6 @@ const lbController = {
 
       return h.response(rankedLeaderboard).code(200);
     } catch (error) {
-      console.error("Error fetching practice leaderboard:", error);
       return h.response({ message: "Failed to fetch leaderboard" }).code(500);
     }
   },
