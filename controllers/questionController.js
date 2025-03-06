@@ -214,11 +214,10 @@ const questionController = {
         try {
           await deleteFile(trimmedTitle);
         } catch (deleteError) {
-          console.error("⚠️ Failed to delete uploaded file:", deleteError);
+          console.error("⚠️ Failed to delete uploaded file");
         }
       }
 
-      console.error(error);
       return h.response({ message: error.message }).code(500);
     } finally {
       if (transaction) await transaction.cleanup();
@@ -373,9 +372,17 @@ const questionController = {
           .code(404);
       }
 
+      const teamInTournament = await Team.findAll({
+        where: { tournament_id: parsedTournamentId },
+        attributes: ["id"],
+        raw: true,
+      });
+
+      const teamIds = teamInTournament.map((team) => team.id);
       const existingSubmission = await TournamentSubmitted.findAll({
         where: {
           question_tournament_id: questionTournament.id,
+          team_id: { [Op.in]: teamIds },
           tournament_id: parsedTournamentId,
         },
         attributes: ["question_tournament_id", "team_id", "users_id"],
@@ -384,61 +391,78 @@ const questionController = {
 
       transaction = await sequelize.transaction();
 
-      if (existingSubmission.length > 0) {
-        const teamIds = existingSubmission.map((item) => item.team_id);
-        const userIds = existingSubmission.map((item) => item.users_id);
-        const questionPoints = questionTournament.Question.point;
+      const questionPoints = questionTournament.Question.point;
 
-        const usedHints = await HintUsed.findAll({
+      const usedHints = await HintUsed.findAll({
+        where: {
+          team_id: { [Op.in]: teamIds },
+        },
+        attributes: ["team_id", "user_id"],
+        include: [
+          {
+            model: Hint,
+            as: "Hint",
+            attributes: ["id", "point", "question_id"],
+            where: { question_id: parsedQuestionId },
+          },
+        ],
+        raw: true,
+        transaction,
+      });
+
+      if (usedHints.length > 0) {
+        const teamHintPenalty = usedHints.reduce((acc, h) => {
+          const penaltyValue =
+            isNaN(h["Hint.point"]) || h["Hint.point"] == null
+              ? 0
+              : h["Hint.point"];
+          acc[h.team_id] = (acc[h.team_id] || 0) + penaltyValue;
+          return acc;
+        }, {});
+
+        const userHintPenalty = usedHints.reduce((acc, h) => {
+          const penaltyValue =
+            isNaN(h["Hint.point"]) || h["Hint.point"] == null
+              ? 0
+              : h["Hint.point"];
+          acc[h.user_id] = (acc[h.user_id] || 0) + penaltyValue;
+          return acc;
+        }, {});
+
+        await Promise.all([
+          ...Object.entries(teamHintPenalty).map(([teamId, penalty]) =>
+            TeamScores.update(
+              {
+                total_points: sequelize.literal(`total_points + ${penalty}`),
+              },
+              {
+                where: { team_id: teamId, tournament_id: parsedTournamentId },
+                transaction,
+              }
+            )
+          ),
+          ...Object.entries(userHintPenalty).map(([userId, penalty]) =>
+            TournamentPoints.update(
+              { points: sequelize.literal(`points + ${penalty}`) },
+              {
+                where: { users_id: userId },
+                transaction,
+              }
+            )
+          ),
+        ]);
+
+        await HintUsed.destroy({
           where: {
-            question_id: parsedQuestionId,
+            hint_id: { [Op.in]: usedHints.map((h) => h["Hint.id"]) },
             team_id: { [Op.in]: teamIds },
           },
-          attributes: ["team_id", "user_id", "point"],
-          raw: true,
           transaction,
         });
+      }
 
-        if (usedHints.length > 0) {
-          const teamHintPenalty = {};
-          usedHints.forEach(({ team_id, penalty }) => {
-            teamHintPenalty[team_id] =
-              (teamHintPenalty[team_id] || 0) + penalty;
-          });
-
-          const userHintPenalty = {};
-          usedHints.forEach(({ user_id, penalty }) => {
-            userHintPenalty[user_id] =
-              (userHintPenalty[user_id] || 0) + penalty;
-          });
-
-          await Promise.all([
-            ...Object.entries(teamHintPenalty).map(([teamId, penalty]) =>
-              TeamScores.update(
-                {
-                  total_points: sequelize.literal(`total_points + ${penalty}`),
-                },
-                {
-                  where: { team_id: teamId, tournament_id: parsedTournamentId },
-                  transaction,
-                }
-              )
-            ),
-            ...Object.entries(userHintPenalty).map(([userId, penalty]) =>
-              TournamentPoints.update(
-                { points: sequelize.literal(`points + ${penalty}`) },
-                { where: { users_id: userId }, transaction }
-              )
-            ),
-            HintUsed.destroy({
-              where: {
-                question_id: parsedQuestionId,
-                team_id: { [Op.in]: teamIds },
-              },
-              transaction,
-            }),
-          ]);
-        }
+      if (existingSubmission.length > 0) {
+        const userIds = existingSubmission.map((item) => item.users_id);
 
         await Promise.all([
           TeamScores.update(
@@ -457,7 +481,10 @@ const questionController = {
           ),
           TournamentPoints.update(
             { points: sequelize.literal(`points - ${questionPoints}`) },
-            { where: { users_id: { [Op.in]: userIds } }, transaction }
+            {
+              where: { users_id: { [Op.in]: userIds } },
+              transaction,
+            }
           ),
           TournamentSubmitted.destroy({
             where: {
@@ -486,6 +513,7 @@ const questionController = {
         .code(200);
     } catch (error) {
       if (transaction) await transaction.rollback();
+      console.log(error);
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -524,6 +552,8 @@ const questionController = {
       if (!question) {
         return h.response({ message: "Question not found" }).code(404);
       }
+
+      let teamId = null;
 
       if (tournament_id) {
         const parsedTournamentId = parseInt(tournament_id, 10);
@@ -581,8 +611,18 @@ const questionController = {
               .response({ message: "User is not part of this tournament." })
               .code(404);
           }
+
+          teamId = userTeam.team_id;
         }
       } else if (user.role !== "Admin") {
+        if (question.Tournament) {
+          return h
+            .response({
+              message:
+                "This question is part of a tournament. Please provide a valid tournament ID.",
+            })
+            .code(400);
+        }
         if (!question.Practice && !question.Tournament) {
           return h
             .response({ message: "This question is not available." })
@@ -616,13 +656,30 @@ const questionController = {
         user.role === "Admin"
           ? HintData
           : await Promise.all(
-              HintData.map(async (hint) => ({
-                id: hint.id,
-                point: hint.point,
-                used: !!(await HintUsed.findOne({
-                  where: { hint_id: hint.id, user_id: user.user_id },
-                })),
-              }))
+              HintData.map(async (hint) => {
+                let used;
+                if (tournament_id) {
+                  used = await HintUsed.findOne({
+                    where: {
+                      hint_id: hint.id,
+                      team_id: teamId,
+                    },
+                  });
+                } else {
+                  used = await HintUsed.findOne({
+                    where: {
+                      hint_id: hint.id,
+                      user_id: user.user_id,
+                      team_id: null,
+                    },
+                  });
+                }
+                return {
+                  id: hint.id,
+                  point: hint.point,
+                  used: !!used,
+                };
+              })
             );
 
       const baseData = {
@@ -668,6 +725,7 @@ const questionController = {
       return h.response({ message: error.message }).code(500);
     }
   },
+
   getQuestionUser: async (request, h) => {
     try {
       const {
@@ -1574,7 +1632,7 @@ const questionController = {
           try {
             await deleteFile(oldFolderPath);
           } catch (deleteError) {
-            console.error("⚠️ Failed to delete old folder:", deleteError);
+            console.error("⚠️ Failed to delete old folder");
           }
         }
 
@@ -1586,22 +1644,19 @@ const questionController = {
           try {
             await deleteFile(question.title);
           } catch (deleteError) {
-            console.error(
-              "⚠️ Failed to delete new folder after error:",
-              deleteError
-            );
+            console.error("⚠️ Failed to delete new folder after error");
           }
         }
 
         throw error;
       }
     } catch (error) {
-      console.error(error);
       return h.response({ message: error.message }).code(500);
     }
   },
 
   deleteQuestion: async (request, h) => {
+    let transaction;
     try {
       const questionId = parseInt(request.params.id, 10);
       if (isNaN(questionId) || questionId <= 0) {
@@ -1623,6 +1678,196 @@ const questionController = {
         return h.response({ message: "Question not found" }).code(404);
       }
 
+      transaction = await sequelize.transaction();
+
+      const existingTournaments = await QuestionTournament.findAll({
+        where: { questions_id: question.id },
+        transaction,
+      });
+
+      if (existingTournaments.length > 0) {
+        const tournamentIds = existingTournaments.map((t) => t.tournament_id);
+
+        const teamIds = await Team.findAll({
+          where: { tournament_id: { [Op.in]: tournamentIds } },
+          attributes: ["id"],
+          transaction,
+        });
+
+        const tournamentHints = await HintUsed.findAll({
+          where: {
+            team_id: { [Op.in]: teamIds.map((t) => t.id) },
+          },
+          include: [
+            {
+              model: Hint,
+              attributes: ["id", "point"],
+              where: { question_id: question.id },
+            },
+          ],
+          transaction,
+        });
+
+        if (tournamentHints.length > 0) {
+          const teamIds = [...new Set(tournamentHints.map((th) => th.team_id))];
+          const userIds = [...new Set(tournamentHints.map((th) => th.user_id))];
+
+          const totalTournamentHintPenalty = tournamentHints.reduce(
+            (sum, th) => sum + th.Hint.point,
+            0
+          );
+
+          await TeamScores.update(
+            {
+              total_points: sequelize.literal(
+                `total_points + ${totalTournamentHintPenalty}`
+              ),
+            },
+            {
+              where: { team_id: { [Op.in]: teamIds } },
+            }
+          );
+
+          await TournamentPoints.update(
+            {
+              points: sequelize.literal(
+                `points + ${totalTournamentHintPenalty}`
+              ),
+            },
+            {
+              where: {
+                team_id: { [Op.in]: teamIds },
+                users_id: { [Op.in]: userIds },
+              },
+            }
+          );
+
+          await HintUsed.destroy({
+            where: { hint_id: tournamentHints.map((th) => th.Hint.id) },
+            transaction,
+          });
+        }
+
+        const TournamentSubmissions = await TournamentSubmitted.findAll({
+          where: {
+            question_tournament_id: existingTournaments.map((t) => t.id),
+          },
+          transaction,
+        });
+
+        if (TournamentSubmissions.length > 0) {
+          const teamIdsInTournament = TournamentSubmissions.map(
+            (ts) => ts.team_id
+          );
+          const userIdsInTournament = TournamentSubmissions.map(
+            (ts) => ts.users_id
+          );
+
+          await TeamScores.update(
+            {
+              total_points: sequelize.literal(
+                `total_points - ${question.point}`
+              ),
+            },
+            {
+              where: { team_id: { [Op.in]: teamIdsInTournament } },
+              transaction,
+            }
+          );
+
+          await TournamentPoints.update(
+            {
+              points: sequelize.literal(`points - ${question.point}`),
+            },
+            {
+              where: {
+                team_id: { [Op.in]: teamIdsInTournament },
+                users_id: { [Op.in]: userIdsInTournament },
+              },
+              transaction,
+            }
+          );
+        }
+
+        await TournamentSubmitted.destroy({
+          where: {
+            question_tournament_id: existingTournaments.map((t) => t.id),
+          },
+          transaction,
+        });
+
+        await QuestionTournament.destroy({
+          where: { questions_id: question.id },
+          transaction,
+        });
+      }
+
+      const existingHints = await Hint.findAll({
+        where: { question_id: question.id },
+        transaction,
+      });
+
+      if (existingHints.length > 0) {
+        const hintIds = existingHints.map((h) => h.id);
+        const hintUsedRecords = await HintUsed.findAll({
+          where: { hint_id: { [Op.in]: hintIds }, team_id: null },
+          include: [
+            {
+              model: Hint,
+              attributes: ["id", "point"],
+              where: { question_id: question.id },
+            },
+          ],
+          transaction,
+        });
+
+        if (hintUsedRecords.length > 0) {
+          const userIds = hintUsedRecords.map((hu) => hu.user_id);
+          const totalHintPenalty = hintUsedRecords.reduce(
+            (sum, hu) => sum + hu.Hint.point,
+            0
+          );
+
+          await Point.update(
+            { points: sequelize.literal(`points + ${totalHintPenalty}`) },
+            { where: { users_id: userIds }, transaction }
+          );
+
+          await HintUsed.destroy({
+            where: { hint_id: { [Op.in]: hintIds } },
+            transaction,
+          });
+        }
+
+        await Hint.destroy({
+          where: { question_id: question.id },
+          transaction,
+        });
+      }
+
+      const existingSubmitted = await Submitted.findAll({
+        where: { question_id: question.id },
+        transaction,
+      });
+
+      if (existingSubmitted.length > 0) {
+        const userIds = existingSubmitted.map((s) => s.users_id);
+
+        await Point.update(
+          { points: sequelize.literal(`points - ${question.point}`) },
+          { where: { users_id: userIds }, transaction }
+        );
+
+        await Submitted.destroy({
+          where: { question_id: question.id },
+          transaction,
+        });
+      }
+
+      await question.destroy({ transaction });
+
+      await transaction.commit();
+
       if (question.file_path) {
         try {
           await deleteFile(question.title);
@@ -1633,93 +1878,11 @@ const questionController = {
         }
       }
 
-      await sequelize.transaction(async (t) => {
-        const existingHints = await Hint.findAll({
-          where: { question_id: question.id },
-          transaction: t,
-        });
-        if (existingHints.length > 0) {
-          const hintIds = existingHints.map((h) => h.id);
-          const hintUsedRecords = await HintUsed.findAll({
-            where: { hint_id: { [Op.in]: hintIds } },
-            include: [
-              {
-                model: Hint,
-                as: "Hint",
-                attributes: ["id", "point"],
-              },
-            ],
-            transaction: t,
-          });
-
-          if (hintUsedRecords.length > 0) {
-            const userIds = hintUsedRecords.map((hu) => hu.user_id);
-            const totalHintPenalty = hintUsedRecords.reduce(
-              (sum, hu) => sum + hu.Hint.point,
-              0
-            );
-
-            await Point.update(
-              { points: sequelize.literal(`points + ${totalHintPenalty}`) },
-              {
-                where: { users_id: userIds },
-                transaction: t,
-              }
-            );
-
-            await HintUsed.destroy({
-              where: { hint_id: hintIds },
-              transaction: t,
-            });
-          }
-
-          await Hint.destroy({
-            where: { question_id: question.id },
-            transaction: t,
-          });
-        }
-
-        const existingSubmitted = await Submitted.findAll({
-          where: { question_id: question.id },
-          transaction: t,
-        });
-        if (existingSubmitted.length > 0) {
-          await Point.update(
-            { points: sequelize.literal(`points - ${question.point}`) },
-            {
-              where: { users_id: existingSubmitted.map((s) => s.users_id) },
-              transaction: t,
-            }
-          );
-          await Submitted.destroy({
-            where: { question_id: question.id },
-            transaction: t,
-          });
-        }
-
-        const existingTournaments = await QuestionTournament.findAll({
-          where: { questions_id: question.id },
-          transaction: t,
-        });
-        if (existingTournaments.length > 0) {
-          await TournamentSubmitted.destroy({
-            where: {
-              question_tournament_id: existingTournaments.map((t) => t.id),
-            },
-            transaction: t,
-          });
-          await QuestionTournament.destroy({
-            where: { questions_id: question.id },
-            transaction: t,
-          });
-        }
-
-        await question.destroy({ transaction: t });
-      });
-
       return h.response({ message: "Question has been deleted" }).code(200);
     } catch (error) {
-      console.error(error);
+      if (transaction) await transaction.rollback();
+      // console.log(error);
+
       return h.response({ message: error.message }).code(500);
     }
   },
@@ -2123,8 +2286,17 @@ const questionController = {
         return h.response({ data: hint.Description }).code(200);
       }
 
+      const existingTournament = await QuestionTournament.findOne({
+        where: { questions_id: hint.question_id },
+      });
+
+      if (existingTournament && !tournament_id) {
+        return h.response({ message: "Unauthorized" }).code(401);
+      }
+
       let teamId = null;
       let pointsToUpdate = null;
+      let tournamentPointsToUpdate = null;
 
       if (tournament_id) {
         const tournamentId = parseInt(tournament_id, 10);
@@ -2188,8 +2360,12 @@ const questionController = {
           return h.response({ data: hint.Description }).code(200);
         }
 
-        pointsToUpdate = await TournamentPoints.findOne({
-          where: { users_id: userTeam.users_id, tournament_id: tournamentId },
+        pointsToUpdate = await TeamScores.findOne({
+          where: { team_id: teamId, tournament_id: tournamentId },
+        });
+
+        tournamentPointsToUpdate = await TournamentPoints.findOne({
+          where: { users_id: user.user_id, tournament_id: tournamentId },
         });
       } else {
         const existingHintUsed = await HintUsed.findOne({
@@ -2205,18 +2381,31 @@ const questionController = {
         });
       }
 
-      if (!pointsToUpdate) {
+      if (!pointsToUpdate || (tournament_id && !tournamentPointsToUpdate)) {
         return h.response({ message: "Point not found" }).code(404);
-      }
-
-      if (pointsToUpdate.points < hint.point) {
-        return h.response({ message: "Not enough points" }).code(400);
       }
 
       const transaction = await sequelize.transaction();
       try {
-        pointsToUpdate.points -= hint.point;
+        if (
+          pointsToUpdate.points < hint.point ||
+          pointsToUpdate.total_points < hint.point
+        ) {
+          return h.response({ message: "Not enough points" }).code(400);
+        }
+
+        if (tournament_id) {
+          pointsToUpdate.total_points -= hint.point;
+          tournamentPointsToUpdate.points -= hint.point;
+        } else {
+          pointsToUpdate.points -= hint.point;
+        }
+
         await pointsToUpdate.save({ transaction });
+
+        if (tournamentPointsToUpdate) {
+          await tournamentPointsToUpdate.save({ transaction });
+        }
 
         await HintUsed.create(
           {
@@ -2236,6 +2425,8 @@ const questionController = {
         return h.response({ message: error.message }).code(500);
       }
     } catch (error) {
+      console.log(error);
+
       return h.response({ message: error.message }).code(500);
     }
   },

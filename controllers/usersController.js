@@ -216,13 +216,27 @@ const usersController = {
       }
 
       let userCondition = {};
-      if (typeof users === "string" && users.includes("@")) {
-        userCondition = { itaccount: users };
-      } else if (!isNaN(parseInt(users, 10) && parseInt(users, 10) > 0)) {
-        userCondition = { student_id: parseInt(users, 10) };
+
+      if (typeof users === "string") {
+        const email = users.toLowerCase();
+
+        if (email.includes("@")) {
+          if (!email.endsWith("@cmu.ac.th")) {
+            await transaction.rollback();
+            return h
+              .response({ message: "Email must be @cmu.ac.th" })
+              .code(400);
+          }
+          userCondition = { itaccount: email };
+        } else if (!isNaN(parseInt(users, 10)) && parseInt(users, 10) > 0) {
+          userCondition = { student_id: parseInt(users, 10) };
+        } else {
+          await transaction.rollback();
+          return h.response({ message: "Invalid users" }).code(400);
+        }
       } else {
         await transaction.rollback();
-        return h.response({ message: "Invalid users" }).code(400);
+        return h.response({ message: "Invalid users format" }).code(400);
       }
 
       const UserToChange = await User.findOne({

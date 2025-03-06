@@ -122,7 +122,6 @@ const categoryController = {
 
       return h.response({ error: "Category not found" }).code(404);
     } catch (error) {
-      console.error(error);
       return h.response({ error: "Unable to update category" }).code(500);
     }
   },
