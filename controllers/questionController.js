@@ -2391,6 +2391,7 @@ const questionController = {
           pointsToUpdate.points < hint.point ||
           pointsToUpdate.total_points < hint.point
         ) {
+          await transaction.rollback();
           return h.response({ message: "Not enough points" }).code(400);
         }
 
