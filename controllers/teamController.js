@@ -530,42 +530,51 @@ const teamController = {
           .response({ message: "Unauthorized: No token provided." })
           .code(401);
       }
-
+  
       const user = await authenticateUser(token);
-
+  
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
       }
-
+  
       const userId = user.user_id;
       const tournamentId = req.params.tournament_id;
       const teamId = req.params.team_id;
-
-      const userTeam = await Users_Team.findOne({
-        where: { users_id: userId },
+  
+      // Check if tournament and team exist
+      const team = await Team.findOne({
+        where: { id: teamId, tournament_id: tournamentId },
+        attributes: ["id", "name", "invite_code"],
         include: {
-          model: Team,
-          where: { id: teamId, tournament_id: tournamentId },
-          attributes: ["id", "name", "invite_code"],
-          as: "team",
-          include: {
-            model: Tournament,
-            attributes: ["name"],
-          },
+          model: Tournament,
+          attributes: ["name", "teamSizeLimit", "event_endDate"],
         },
       });
-
-      if (!userTeam || !userTeam.team) {
+  
+      if (!team) {
         return h
           .response({
-            message: "User is not part of any team in this tournament.",
+            message: "Team not found in this tournament.",
           })
           .code(404);
       }
-
-      const team = userTeam.team;
-      // console.log(team);
-
+  
+      // If user is not an admin, check if they are part of the team
+      if (user.role !== "Admin") {
+        const userTeam = await Users_Team.findOne({
+          where: { users_id: userId, team_id: teamId },
+        });
+  
+        if (!userTeam) {
+          return h
+            .response({
+              message: "User is not part of this team and doesn't have admin privileges.",
+            })
+            .code(403);
+        }
+      }
+  
+      // Get team members
       const teamMembers = await Users_Team.findAll({
         where: { team_id: teamId },
         include: {
@@ -575,7 +584,7 @@ const teamController = {
         },
         order: [["createdAt", "ASC"]],
       });
-
+  
       const members = teamMembers.map((member) => ({
         userId: member.user.user_id,
         isLeader: member.createdAt === teamMembers[0].createdAt,
@@ -583,22 +592,21 @@ const teamController = {
         first_name: member.user.first_name,
         last_name: member.user.last_name,
       }));
-
-      const memberCount = teamMembers.length; // Count the number of team members
-      const tournament = await Tournament.findOne({
-        where: { id: tournamentId },
-      });
-
+  
+      const memberCount = teamMembers.length;
+  
       return h
         .response({
           tournamentName: team.Tournament.name,
-          tournament_endDate: tournament.event_endDate,
+          tournament_endDate: team.Tournament.event_endDate,
           teamId: team.id,
           teamName: team.name,
           invitedCode: team.invite_code,
           memberCount,
-          memberLimit: tournament.teamSizeLimit,
+          memberLimit: team.Tournament.teamSizeLimit,
           members,
+          // Add a flag to indicate if the requester is an admin
+          isAdminView: user.role === "Admin",
         })
         .code(200);
     } catch (error) {
@@ -609,7 +617,7 @@ const teamController = {
           error: error.message,
         })
         .code(500);
-    }
+      }
   },
 
   kickTeamMember: async (req, h) => {

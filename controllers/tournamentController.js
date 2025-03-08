@@ -1050,6 +1050,175 @@ const tournamentController = {
         .code(500);
     }
   },
+
+  adminDeleteTeam: async (req, h) => {
+    try {
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h
+          .response({ message: "Unauthorized: No token provided." })
+          .code(401);
+      }
+  
+      const user = await authenticateUser(token);
+  
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+  
+      // Check if user is an admin
+      if (user.role !== "Admin") {
+        return h
+          .response({ message: "Forbidden: Only admins can delete teams." })
+          .code(403);
+      }
+  
+      // Get teamId from payload instead of params
+      const { teamId, tournamentId } = req.payload;
+  
+      if (!teamId || !tournamentId) {
+        return h
+          .response({ message: "Missing required fields: teamId and/or tournamentId." })
+          .code(400);
+      }
+  
+      // Verify the team exists in the specified tournament
+      const team = await Team.findOne({
+        where: { 
+          id: teamId,
+          tournament_id: tournamentId
+        }
+      });
+  
+      if (!team) {
+        return h
+          .response({ message: "Team not found in the specified tournament." })
+          .code(404);
+      }
+  
+      // Remove all users from the team
+      await Users_Team.destroy({
+        where: { team_id: teamId },
+      });
+  
+      // Delete the team
+      await Team.destroy({
+        where: { id: teamId },
+      });
+  
+      return h
+        .response({
+          message: "Team and its members have been successfully deleted by admin.",
+        })
+        .code(200);
+    } catch (error) {
+      console.error("Error in admin deleting team:", error);
+      return h
+        .response({
+          message: "Failed to delete team",
+          error: error.message,
+        })
+        .code(500);
+    }
+  },
+
+  adminKickTeamMember: async (req, h) => {
+    try {
+      const token = req.state["cmu-oauth-token"];
+      if (!token) {
+        return h
+          .response({ message: "Unauthorized: No token provided." })
+          .code(401);
+      }
+  
+      const user = await authenticateUser(token);
+  
+      if (!user) {
+        return h.response({ message: "User not found." }).code(404);
+      }
+  
+      // Check if user is an admin
+      if (user.role !== "Admin") {
+        return h
+          .response({ message: "Forbidden: Only admins can kick team members." })
+          .code(403);
+      }
+  
+      // Get teamId and memberIdToKick from payload
+      const { teamId, memberIdToKick } = req.payload;
+  
+      if (!teamId || !memberIdToKick) {
+        return h
+          .response({ message: "Missing required fields: teamId and/or memberIdToKick." })
+          .code(400);
+      }
+  
+      // Check if the team exists
+      const team = await Team.findOne({
+        where: { id: teamId },
+        attributes: ["id", "tournament_id"]
+      });
+  
+      if (!team) {
+        return h.response({ message: "Team not found." }).code(404);
+      }
+  
+      const tournamentId = team.tournament_id;
+  
+      // Ensure the member to kick is part of the team
+      const memberRecord = await Users_Team.findOne({
+        where: { team_id: teamId, users_id: memberIdToKick },
+      });
+  
+      if (!memberRecord) {
+        return h
+          .response({
+            message: "Member not found or is not part of the team.",
+          })
+          .code(404);
+      }
+  
+      // Count how many members are in the team (including the one being kicked)
+      const memberCount = await Users_Team.count({
+        where: { team_id: teamId }
+      });
+  
+      // Kick the member from the team
+      await Users_Team.destroy({
+        where: { team_id: teamId, users_id: memberIdToKick },
+      });
+  
+      // Remove user's tournament points
+      await TournamentPoints.destroy({
+        where: { tournament_id: tournamentId, users_id: memberIdToKick },
+      });
+      
+      let message = "Member successfully kicked from the team by admin.";
+      
+      // If this was the last member, delete the team as well
+      if (memberCount === 1) {
+        await Team.destroy({
+          where: { id: teamId },
+        });
+        message = "Member kicked and team deleted since it was the last member.";
+      }
+  
+      return h
+        .response({ 
+          message: message,
+          teamDeleted: memberCount === 1
+        })
+        .code(200);
+    } catch (error) {
+      console.error("Error in admin kicking team member:", error);
+      return h
+        .response({
+          message: "Failed to kick team member",
+          error: error.message,
+        })
+        .code(500);
+    }
+  },
 };
 
 async function authenticateUser(token) {

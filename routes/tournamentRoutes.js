@@ -106,6 +106,50 @@ const tournamentRoutes = [
     path: "/api/tournaments/list",
     handler: tournamentController.getAllTournamentList,
   },
+  {
+    method: "DELETE",
+    path: "/api/admin/deleteTeam",
+    handler: tournamentController.adminDeleteTeam,
+    options: {
+      validate: {
+        payload: Joi.object({
+          teamId: Joi.number().integer().required().messages({
+            "number.base": "Team ID must be a number.",
+            "any.required": "Team ID is required.",
+          }),
+          tournamentId: Joi.number().integer().required().messages({
+            "number.base": "Tournament ID must be a number.",
+            "any.required": "Tournament ID is required.",
+          }),
+        }),
+      },
+      description: "Admin delete team",
+      notes: "Allows admin to delete a team from a tournament. Requires admin privileges.",
+      tags: ["api", "admin", "teams"],
+    },
+  },
+  {
+    method: "DELETE",
+    path: "/api/admin/kickMember",
+    handler: tournamentController.adminKickTeamMember,
+    options: {
+      validate: {
+        payload: Joi.object({
+          teamId: Joi.number().integer().required().messages({
+            "number.base": "Team ID must be a number.",
+            "any.required": "Team ID is required.",
+          }),
+          memberIdToKick: Joi.string().required().messages({
+            "number.base": "Member ID must be a number.",
+            "any.required": "Member ID is required.",
+          }),
+        }),
+      },
+      description: "Admin kick team member",
+      notes: "Allows admin to kick a member from a team. Requires admin privileges.",
+      tags: ["api", "admin", "teams"],
+    },
+  },
 ];
 
 module.exports = tournamentRoutes;

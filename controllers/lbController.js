@@ -32,6 +32,7 @@ const lbController = {
             attributes: ["first_name", "last_name"],
           },
         ],
+        limit: 100 // Limit to top 100 users
       });
 
       const rankedLeaderboard = leaderboard.map((entry, index) => ({
