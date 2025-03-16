@@ -810,7 +810,7 @@ const tournamentController = {
                     where: { tournament_id },
                     attributes: ["points"],
                     required: false,
-                    separate: true, // ✅ ดึง TournamentPoints แยกกันชัดเจน
+                    separate: true,
                   },
                 ],
               },
@@ -825,7 +825,7 @@ const tournamentController = {
         const totalPoints = team.TeamScores[0]?.total_points || 0;
 
         const members = team.usersTeams.map((member, index) => ({
-          // userId: member.user.user_id,
+          userId: member.user.user_id,
           // isLeader: index === 0,
           firstName: member.user.first_name,
           lastName: member.user.last_name,

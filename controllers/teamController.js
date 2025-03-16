@@ -175,6 +175,7 @@ const teamController = {
       }
 
       const user_id = user.user_id;
+      // const user_id = "bfa4cffa-1cb8-4b0c-9df5-8335d8f2125a"; 
       let team;
 
       if (invite_code.length === 8) {
@@ -635,7 +636,8 @@ const teamController = {
         return h.response({ message: "User not found." }).code(404);
       }
 
-      const userId = user.user_id;
+      // const userId = user.user_id;
+      const userId = "c08006fd-cb36-425c-8bc0-56d5e3a2b5d7";
       const teamId = req.params.team_id;
       const memberIdToKick = req.params.member_id;
 
@@ -657,7 +659,7 @@ const teamController = {
       if (!leaderRecord || leaderRecord.users_id !== userId) {
         return h
           .response({
-            message: "Unauthorized: Only the team leader can kick members.",
+            message: "Unauthorized: Only the team leader can kick members OR you are not part of the team.",
           })
           .code(403);
       }
@@ -687,6 +689,20 @@ const teamController = {
 
       const tournamentId = team.tournament_id;
 
+      // Check if the leader is trying to kick themselves
+      const isLeaderKickingSelf = userId === memberIdToKick;
+      
+      // Count remaining members (not including the one being kicked)
+      let remainingMembers = 0;
+      if (!isLeaderKickingSelf) {
+        remainingMembers = await Users_Team.count({
+          where: { 
+            team_id: teamId,
+            users_id: { [db.Sequelize.Op.ne]: memberIdToKick }
+          }
+        });
+      }
+
       // Kick the member from the team
       await Users_Team.destroy({
         where: { team_id: teamId, users_id: memberIdToKick },
@@ -697,8 +713,33 @@ const teamController = {
         where: { tournament_id: tournamentId, users_id: memberIdToKick },
       });
 
+      // If leader kicked themselves OR if this was the last member, delete the team
+      if (isLeaderKickingSelf || remainingMembers === 0) {
+        // Delete all remaining team members (if any)
+        await Users_Team.destroy({
+          where: { team_id: teamId }
+        });
+        
+        // Delete the team
+        await Team.destroy({
+          where: { id: teamId }
+        });
+        
+        return h
+          .response({ 
+            message: isLeaderKickingSelf ? 
+              "You have left the team. Team has been deleted." : 
+              "Member kicked. Team has been deleted as it has no more members.",
+            teamDeleted: true
+          })
+          .code(200);
+      }
+
       return h
-        .response({ message: "Member successfully kicked from the team." })
+        .response({ 
+          message: "Member successfully kicked from the team.",
+          teamDeleted: false
+        })
         .code(200);
     } catch (error) {
       console.error("Error kicking team member:", error);
@@ -764,7 +805,8 @@ const teamController = {
         return h
           .response({
             message:
-              "Unauthorized: Team leaders cannot leave their own team. Assign a new leader first.",
+              // "Unauthorized: Team leaders cannot leave their own team. Assign a new leader first.",
+              "Unauthorized: Team leaders cannot leave their own team. Please delete the team or kick all other members instead.",
           })
           .code(403);
       }
