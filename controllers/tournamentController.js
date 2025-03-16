@@ -3,6 +3,10 @@ const { Team, Users_Team, TeamScores, User, TournamentPoints, Tournament } = db;
 const { Op } = require("sequelize");
 const jwt = require("jsonwebtoken");
 const moment = require("moment-timezone");
+const fs = require("fs");
+const fastCsv = require("fast-csv");
+const slugify = require("slugify");
+const teamscores = require("../models/teamscores");
 
 const tournamentController = {
   generatePrivateCode: () => {
@@ -182,7 +186,7 @@ const tournamentController = {
       if (!tournament) {
         return h.response({ message: "Tournament not found." }).code(404);
       }
-      
+
       // Convert dates to UTC+7
       const enrollStartDateUTC7 = moment
         .tz(enroll_startDate, "Asia/Bangkok")
@@ -200,22 +204,25 @@ const tournamentController = {
         .tz(event_endDate, "Asia/Bangkok")
         .utc()
         .toDate();
-      
+
       // Check if current time has passed enrollment start date
       const currentTime = new Date();
       const enrollmentStarted = currentTime >= tournament.enroll_startDate;
-      
+
       // If enrollment has started, prevent changing teamSizeLimit and limit
-      if (enrollmentStarted && 
-          (tournament.teamSizeLimit !== parseInt(teamSizeLimit) || 
-           tournament.teamLimit !== parseInt(limit))) {
+      if (
+        enrollmentStarted &&
+        (tournament.teamSizeLimit !== parseInt(teamSizeLimit) ||
+          tournament.teamLimit !== parseInt(limit))
+      ) {
         return h
           .response({
-            message: "Cannot change team size limit or team limit after enrollment has started",
+            message:
+              "Cannot change team size limit or team limit after enrollment has started",
           })
           .code(400);
       }
-      
+
       if (enrollStartDateUTC7 >= enrollEndDateUTC7) {
         return h
           .response({
@@ -242,7 +249,7 @@ const tournamentController = {
           .response({ message: "Team size limit must be 1 to 4" })
           .code(400);
       }
-      
+
       const playerLimit = teamSizeLimit === 1 ? limit : teamSizeLimit * limit;
       const teamLimit = teamSizeLimit === 1 ? limit : limit;
 
@@ -261,7 +268,7 @@ const tournamentController = {
           joinCode = tournamentController.generatePrivateCode();
         }
       }
-      
+
       // Check if mode changed from public to private
       const updateData = {
         name,
@@ -275,18 +282,21 @@ const tournamentController = {
         playerLimit,
         teamLimit,
       };
-    
+
       // Generate new private code if changing from public to private
-      if (tournament.mode.toLowerCase() === 'public' && mode.toLowerCase() === 'private') {
+      if (
+        tournament.mode.toLowerCase() === "public" &&
+        mode.toLowerCase() === "private"
+      ) {
         updateData.joinCode = joinCode;
       }
-      
+
       await tournament.update(updateData);
-      
+
       return h
-        .response({ 
+        .response({
           message: "Tournament updated successfully.",
-          joinCode: updateData.joinCode || tournament.joinCode
+          joinCode: updateData.joinCode || tournament.joinCode,
         })
         .code(200);
     } catch (error) {
@@ -719,9 +729,15 @@ const tournamentController = {
   getAllInfoInTournament: async (req, h) => {
     try {
       const { tournament_id } = req.params;
+      const { download } = req.query;
 
       if (!tournament_id) {
         return h.response({ message: "Tournament ID is required." }).code(400);
+      }
+
+      const tournament = await Tournament.findByPk(tournament_id);
+      if (!tournament) {
+        return h.response({ message: "Tournament not found." }).code(404);
       }
 
       const token = req.state["cmu-oauth-token"];
@@ -780,7 +796,13 @@ const tournamentController = {
               {
                 model: User,
                 as: "user",
-                attributes: ["user_id", "first_name", "last_name"],
+                attributes: [
+                  "user_id",
+                  "first_name",
+                  "last_name",
+                  "student_id",
+                  "itaccount",
+                ],
                 include: [
                   {
                     model: TournamentPoints,
@@ -807,6 +829,8 @@ const tournamentController = {
           // isLeader: index === 0,
           firstName: member.user.first_name,
           lastName: member.user.last_name,
+          studentID: member.user.student_id,
+          itaccount: member.user.itaccount,
           individualScore: member.user.tournamentPoints?.[0]?.points || 0,
         }));
 
@@ -821,6 +845,55 @@ const tournamentController = {
 
       // Sort the response by rank
       response.sort((a, b) => a.rank - b.rank);
+
+      if (download === "true") {
+        const timestampBangkok = moment()
+          .tz("Asia/Bangkok")
+          .format("YYYYMMDD_HHmmssSSS");
+        const fileName = `${slugify(tournament.name)}_${timestampBangkok}.csv`;
+        const filePath = `./${fileName}`;
+        const ws = fs.createWriteStream(filePath);
+
+        const formattedResponse = [];
+
+        // สำหรับแต่ละทีม
+        response.forEach((team) => {
+          // สำหรับแต่ละสมาชิกในทีม
+          team.members.forEach((member) => {
+            const row = {
+              studentID: member.studentID,
+              firstName: member.firstName,
+              lastName: member.lastName,
+              teamID: team.teamID,
+              teamName: team.teamName,
+              rank: team.rank,
+              teamScore: team.totalPoints,
+              score: member.individualScore,
+              email: member.itaccount || "",
+            };
+            formattedResponse.push(row);
+          });
+        });
+
+        await new Promise((resolve, reject) => {
+          fastCsv
+            .write(formattedResponse, { headers: true })
+            .pipe(ws)
+            .on("finish", resolve)
+            .on("error", reject);
+        });
+
+        setTimeout(() => fs.unlinkSync(filePath), 5000);
+
+        return h.file(filePath, {
+          confine: false,
+          mode: "attachment",
+          filename: fileName,
+          headers: {
+            "Content-Disposition": `attachment; filename="${fileName}"`,
+          },
+        });
+      }
 
       return h.response(response).code(200);
     } catch (error) {
@@ -1059,56 +1132,59 @@ const tournamentController = {
           .response({ message: "Unauthorized: No token provided." })
           .code(401);
       }
-  
+
       const user = await authenticateUser(token);
-  
+
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
       }
-  
+
       // Check if user is an admin
       if (user.role !== "Admin") {
         return h
           .response({ message: "Forbidden: Only admins can delete teams." })
           .code(403);
       }
-  
+
       // Get teamId from payload instead of params
       const { teamId, tournamentId } = req.payload;
-  
+
       if (!teamId || !tournamentId) {
         return h
-          .response({ message: "Missing required fields: teamId and/or tournamentId." })
+          .response({
+            message: "Missing required fields: teamId and/or tournamentId.",
+          })
           .code(400);
       }
-  
+
       // Verify the team exists in the specified tournament
       const team = await Team.findOne({
-        where: { 
+        where: {
           id: teamId,
-          tournament_id: tournamentId
-        }
+          tournament_id: tournamentId,
+        },
       });
-  
+
       if (!team) {
         return h
           .response({ message: "Team not found in the specified tournament." })
           .code(404);
       }
-  
+
       // Remove all users from the team
       await Users_Team.destroy({
         where: { team_id: teamId },
       });
-  
+
       // Delete the team
       await Team.destroy({
         where: { id: teamId },
       });
-  
+
       return h
         .response({
-          message: "Team and its members have been successfully deleted by admin.",
+          message:
+            "Team and its members have been successfully deleted by admin.",
         })
         .code(200);
     } catch (error) {
@@ -1130,46 +1206,50 @@ const tournamentController = {
           .response({ message: "Unauthorized: No token provided." })
           .code(401);
       }
-  
+
       const user = await authenticateUser(token);
-  
+
       if (!user) {
         return h.response({ message: "User not found." }).code(404);
       }
-  
+
       // Check if user is an admin
       if (user.role !== "Admin") {
         return h
-          .response({ message: "Forbidden: Only admins can kick team members." })
+          .response({
+            message: "Forbidden: Only admins can kick team members.",
+          })
           .code(403);
       }
-  
+
       // Get teamId and memberIdToKick from payload
       const { teamId, memberIdToKick } = req.payload;
-  
+
       if (!teamId || !memberIdToKick) {
         return h
-          .response({ message: "Missing required fields: teamId and/or memberIdToKick." })
+          .response({
+            message: "Missing required fields: teamId and/or memberIdToKick.",
+          })
           .code(400);
       }
-  
+
       // Check if the team exists
       const team = await Team.findOne({
         where: { id: teamId },
-        attributes: ["id", "tournament_id"]
+        attributes: ["id", "tournament_id"],
       });
-  
+
       if (!team) {
         return h.response({ message: "Team not found." }).code(404);
       }
-  
+
       const tournamentId = team.tournament_id;
-  
+
       // Ensure the member to kick is part of the team
       const memberRecord = await Users_Team.findOne({
         where: { team_id: teamId, users_id: memberIdToKick },
       });
-  
+
       if (!memberRecord) {
         return h
           .response({
@@ -1177,36 +1257,37 @@ const tournamentController = {
           })
           .code(404);
       }
-  
+
       // Count how many members are in the team (including the one being kicked)
       const memberCount = await Users_Team.count({
-        where: { team_id: teamId }
+        where: { team_id: teamId },
       });
-  
+
       // Kick the member from the team
       await Users_Team.destroy({
         where: { team_id: teamId, users_id: memberIdToKick },
       });
-  
+
       // Remove user's tournament points
       await TournamentPoints.destroy({
         where: { tournament_id: tournamentId, users_id: memberIdToKick },
       });
-      
+
       let message = "Member successfully kicked from the team by admin.";
-      
+
       // If this was the last member, delete the team as well
       if (memberCount === 1) {
         await Team.destroy({
           where: { id: teamId },
         });
-        message = "Member kicked and team deleted since it was the last member.";
+        message =
+          "Member kicked and team deleted since it was the last member.";
       }
-  
+
       return h
-        .response({ 
+        .response({
           message: message,
-          teamDeleted: memberCount === 1
+          teamDeleted: memberCount === 1,
         })
         .code(200);
     } catch (error) {

@@ -14,12 +14,15 @@
     "@hapi/inert": "^7.1.0",
     "axios": "^1.7.7",
     "dotenv": "^16.4.5",
+    "fast-csv": "^5.0.2",
+    "fs": "^0.0.1-security",
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
     "moment-timezone": "^0.5.47",
     "pg": "^8.13.3",
     "sequelize": "^6.37.5",
     "sequelize-cli": "^6.6.2",
+    "slugify": "^1.6.6",
     "uuid": "^10.0.0",
     "xss": "^1.0.15"
   }
